@@ -1,0 +1,54 @@
+name: Descompactar projeto Siart
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "siart-fase1.zip"
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verificar ZIP
+        run: |
+          test -f "siart-fase1.zip" || {
+            echo "Arquivo siart-fase1.zip não encontrado na raiz do repositório."
+            exit 1
+          }
+
+      - name: Descompactar projeto
+        run: |
+          mkdir -p .unpack
+          unzip -o "siart-fase1.zip" -d .unpack
+
+          # O ZIP enviado contém uma pasta raiz chamada "siart".
+          if [ -d ".unpack/siart" ]; then
+            cp -a .unpack/siart/. .
+          else
+            cp -a .unpack/. .
+          fi
+
+          rm -rf .unpack
+          rm -f "siart-fase1.zip"
+
+      - name: Salvar arquivos no GitHub
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração para salvar."
+          else
+            git commit -m "Descompacta projeto Siart [skip ci]"
+            git push
+          fi
