@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Siart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<svg width="0" height="0" class="sprite" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e4e6ea"/><stop offset="1" stop-color="#8c8f97"/>
+    </linearGradient>
+    <mask id="moon-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">
+      <rect width="32" height="32" fill="#fff"/><circle cx="21" cy="12" r="10.5" fill="#000"/>
+    </mask>
+    <symbol id="moon" viewBox="0 0 32 32"><circle cx="15" cy="17" r="12" fill="url(#silver)" mask="url(#moon-mask)"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+  <aside id="sidebar" aria-label="Conversas">
+    <div class="brand"><svg class="logo"><use href="#moon"/></svg><span>Siart</span></div>
+    <button id="new-chat" class="btn-new" type="button"><svg class="ico"><use href="#i-plus"/></svg>Nova conversa</button>
+    <nav id="chat-list"></nav>
+    <p class="side-note">As conversas ficam salvas somente neste navegador.</p>
+  </aside>
+  <div id="scrim" hidden></div>
+
+  <main>
+    <header class="topbar">
+      <button id="menu" class="icon-btn" type="button" aria-label="Abrir conversas"><svg class="ico"><use href="#i-menu"/></svg></button>
+      <h1 id="title">Nova conversa</h1>
+    </header>
+    <div id="banner" class="banner" role="alert" hidden></div>
+    <div id="messages" role="log" aria-live="polite" tabindex="-1"></div>
+    <form id="composer" autocomplete="off">
+      <div class="box">
+        <label for="input" class="sr">Mensagem para a Siart</label>
+        <textarea id="input" rows="1" maxlength="8000" placeholder="Escreva para a Siart"></textarea>
+        <button id="send" class="send" type="submit" aria-label="Enviar mensagem"><svg class="ico"><use href="#i-send"/></svg></button>
+      </div>
+      <p class="hint">Enter envia, Shift+Enter quebra a linha. A Siart pode errar; confira o código antes de usar.</p>
+    </form>
+  </main>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
