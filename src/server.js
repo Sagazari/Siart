@@ -12,7 +12,7 @@ const MIME = {
   '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8',
 };
-const MAX_BODY = 256 * 1024;
+const MAX_BODY = 8 * 1024 * 1024;
 
 function loadConfig(env = process.env) {
   const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);

@@ -25,6 +25,7 @@
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></symbol>
+    <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m8 12.5 7.2-7.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </defs>
 </svg>
@@ -45,16 +46,21 @@
     </header>
     <div id="banner" class="banner" role="alert" hidden></div>
     <div id="messages" role="log" aria-live="polite" tabindex="-1"></div>
+    <div id="activity" class="activity" hidden aria-live="polite"><svg class="logo moon-spin"><use href="#moon"/></svg><div class="activity-copy"><strong id="activity-title">Analisando sua solicitação</strong><span id="activity-detail" class="shimmer">Organizando a melhor abordagem...</span></div></div>
     <form id="composer" autocomplete="off">
+      <div id="attachments" class="attachments" hidden></div>
       <div class="box">
+        <button id="attach" class="attach" type="button" aria-label="Anexar fotos ou arquivos"><svg class="ico"><use href="#i-paperclip"/></svg></button>
+        <input id="file-input" type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,.txt,.md,.json,.js,.ts,.jsx,.tsx,.html,.css,.py,.java,.c,.cpp,.cs,.go,.rs,.sql,.xml,.yml,.yaml,.sh,.env,.log">
         <label for="input" class="sr">Mensagem para a Siart</label>
         <textarea id="input" rows="1" maxlength="8000" placeholder="Escreva para a Siart"></textarea>
         <button id="send" class="send" type="submit" aria-label="Enviar mensagem"><svg class="ico"><use href="#i-send"/></svg></button>
       </div>
-      <p class="hint">Enter envia, Shift+Enter quebra a linha. A Siart pode errar; confira o código antes de usar.</p>
+      <p class="hint">Enter envia · Shift+Enter quebra linha · Anexe imagens ou arquivos de código/texto (até 5 MB cada).</p>
     </form>
   </main>
 </div>
+<div id="preview-modal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Prévia do arquivo"><div class="modal-panel"><div class="modal-head"><strong id="preview-title">Prévia HTML</strong><button id="preview-close" class="icon-btn" type="button" aria-label="Fechar prévia">×</button></div><iframe id="preview-frame" sandbox="allow-forms allow-modals" title="Prévia do HTML"></iframe></div></div>
 <script src="/app.js"></script>
 </body>
 </html>

@@ -27,6 +27,23 @@ test('validateChat aplica limites de tamanho', () => {
   assert.equal(validateChat({ messages: many }).ok, false);
 });
 
+test('validateChat aceita anexos de texto e imagem válidos', () => {
+  const image = 'data:image/png;base64,aGVsbG8=';
+  const r = validateChat({ messages: [{ role: 'user', content: [
+    { type: 'text', text: 'Analise este arquivo' },
+    { type: 'image_url', image_url: { url: image } },
+  ] }] });
+  assert.equal(r.ok, true);
+  assert.equal(r.messages[0].content[1].image_url.url, image);
+});
+
+test('validateChat rejeita URL de imagem externa em anexo', () => {
+  const r = validateChat({ messages: [{ role: 'user', content: [
+    { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+  ] }] });
+  assert.equal(r.ok, false);
+});
+
 test('safeStaticPath bloqueia path traversal', () => {
   const root = '/srv/public';
   assert.equal(safeStaticPath(root, '/../secret'), null);

@@ -1,58 +1,54 @@
-# Siart – Fase 1 (fundação funcional)
+# Siart — Fase 2 (interface e fluxo de criação)
 
-Chat com streaming, com a chave da Groq guardada só no servidor. Sem dependências externas: usa apenas Node 20+.
+Assistente de programação com streaming via Groq, interface responsiva, indicador animado da Lua, anexos de imagem/texto/código e cartões para baixar arquivos gerados. Requer Node.js 20+ e não usa dependências externas.
 
 ## Rodar localmente
 
 ```bash
-cp .env.example .env        # preencha GROQ_API_KEY
+cp .env.example .env  # preencha GROQ_API_KEY
 node --env-file=.env src/server.js
 # abra http://localhost:3000
-npm test                    # 10 testes, sem rede externa
+npm test
 ```
+
+## O que esta versão oferece
+
+- Chat com respostas em streaming, botão de parar e histórico local no navegador.
+- Lua animada enquanto a Siart está respondendo; indicador de atividade com texto em gradiente.
+- Markdown organizado, tabelas, listas e blocos de código com botão de copiar.
+- Upload de imagens PNG/JPEG/WebP/GIF e arquivos de texto/código suportados na interface (até 5 MB por arquivo).
+- Cartões de arquivos quando a resposta usa o formato `**Arquivo: nome.ext**` seguido de bloco de código. Arquivos podem ser baixados; HTML pode ser aberto em prévia isolada.
+- Edição assistida: anexe um arquivo de texto/código e peça as alterações; a Siart recebe o conteúdo no contexto e pode devolver uma versão modificada para download.
+- Mensagens limitadas a 8.000 caracteres, validação no navegador e no servidor.
+- Chave da Groq permanece no servidor; cabeçalhos de segurança, rate limit por IP, validação de entrada e proteção contra path traversal.
+
+## Limitações importantes
+
+- A leitura de imagens depende de um modelo Groq com suporte a visão. O modelo padrão `openai/gpt-oss-120b` é usado para texto/código; para interpretar imagens, configure `GROQ_MODEL` com um modelo de visão atualmente disponível na sua conta Groq e compatível com entrada de imagem. Se o modelo não aceitar imagens, o provedor retornará erro.
+- PDF e documentos binários não são extraídos nesta versão. Use arquivos de texto/código ou converta o conteúdo para texto antes de anexar.
+- Não existe pesquisa real na web, execução de código, terminal, editor colaborativo ou agente autônomo nesta fase. O indicador de atividade não finge que essas ferramentas foram usadas.
+- Os arquivos gerados são montados no navegador a partir dos blocos de código enviados pela IA; não são gravados automaticamente no repositório nem no servidor.
+- Histórico e anexos não são sincronizados entre dispositivos; o histórico fica no localStorage do navegador.
+- A prévia HTML usa iframe sandbox, mas ainda assim revise código gerado antes de publicar.
 
 ## Variáveis de ambiente
 
 | Variável | Obrigatória | Padrão | Uso |
 |---|---|---|---|
-| `GROQ_API_KEY` | sim | – | chave secreta; nunca vai ao navegador nem aos logs |
-| `GROQ_MODEL` | não | `openai/gpt-oss-120b` | modelo da Groq |
-| `PORT` | não | `3000` | o Render define sozinho |
-| `TRUST_PROXY` | não | desligado | `1` no Render, para o rate limit enxergar o IP real |
-| `ALLOWED_ORIGIN` | não | – | só se o frontend ficar em outro domínio |
-| `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | não | `20` / `60000` | requisições de chat por IP |
-| `UPSTREAM_TIMEOUT_MS` | não | `90000` | tempo máximo de uma resposta |
-| `MAX_COMPLETION_TOKENS` | não | `4096` | teto de tokens por resposta |
-
-Ao iniciar, o servidor consulta a lista de modelos da Groq e registra um aviso se `GROQ_MODEL` não estiver ativo.
-A Groq anunciou em 17/06/2026 a descontinuação de `llama-3.3-70b-versatile` (e de `llama-3.1-8b-instant`), por isso o padrão é `openai/gpt-oss-120b`. Confira a lista atual em console.groq.com/docs/models.
+| `GROQ_API_KEY` | sim | — | chave secreta da Groq |
+| `GROQ_MODEL` | não | `openai/gpt-oss-120b` | modelo ativo na Groq |
+| `PORT` | não | `3000` | porta HTTP |
+| `TRUST_PROXY` | não | desligado | use `1` atrás de proxy confiável |
+| `ALLOWED_ORIGIN` | não | — | origem permitida quando frontend separado |
+| `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | não | `20` / `60000` | limite por IP |
+| `UPSTREAM_TIMEOUT_MS` | não | `90000` | timeout do provedor |
+| `MAX_COMPLETION_TOKENS` | não | `4096` | teto de tokens de saída |
 
 ## Deploy no Render
 
-1. Suba esta pasta para um repositório no GitHub (o `.gitignore` já exclui `.env`).
-2. No Render: **New → Blueprint** e aponte para o repositório (usa o `render.yaml`), ou crie um **Web Service** com:
-   - Build Command: `npm install`
-   - Start Command: `npm start`
-   - Health Check Path: `/health`
-3. Em **Environment**, preencha `GROQ_API_KEY` como variável secreta.
-4. Depois do deploy, abra a URL do serviço. Se aparecer o aviso vermelho sobre `GROQ_API_KEY`, a chave não foi lida.
+- Build Command: `npm install`
+- Start Command: `npm start`
+- Health Check Path: `/health`
+- Environment: configure `GROQ_API_KEY` como variável secreta e `GROQ_MODEL` conforme o modelo habilitado na sua conta.
 
-No plano gratuito o serviço hiberna sem uso, e a primeira requisição pode demorar.
-
-## O que a Fase 1 entrega
-
-- Chat com streaming (SSE) e eventos estruturados: `task.started`, `message.delta`, `message.completed`, `task.completed`, `task.failed`, cada um com `taskId` e `ts`.
-- Botão de parar a resposta, cópia de blocos de código, Markdown seguro (tudo é escapado).
-- Histórico de conversas **salvo no navegador** (localStorage), com criar, abrir e excluir.
-- Servidor: validação de entrada, limite de tamanho, rate limit por IP, bloqueio de origem externa, CSP e demais cabeçalhos, proteção contra path traversal, timeout, encerramento limpo (SIGTERM), `/health`, logs JSON com `requestId` e sem segredos.
-- Interface responsiva (barra lateral em painel no celular), foco visível, `prefers-reduced-motion`.
-
-## Pendente (fases seguintes do Prompt Mestre)
-
-- Histórico no servidor/banco (hoje só no navegador, sem contas).
-- Arquivos e projetos, editor Monaco, prévia isolada, geração de documentos (Fases 2 a 4).
-- Tool calling e modo agente (Fase 5). O system prompt atual declara que a Siart **não** tem ferramentas; atualize `src/systemPrompt.js` quando elas existirem.
-- Upload, visão e leitura de PDF.
-- Rate limit em memória: vale para uma instância só.
-- A interface carrega a fonte Inter do Google Fonts; se preferir, hospede a fonte localmente.
-- Visual da interface não foi testado em navegador real neste ambiente.
+Não envie `.env` nem chaves secretas ao GitHub.
