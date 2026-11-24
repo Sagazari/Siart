@@ -3,7 +3,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const { validateChat, createRateLimiter, safeStaticPath } = require('../src/lib');
-const { createServer, loadConfig } = require('../src/server');
+const os = require('node:os');
+const fsx = require('node:fs');
+const pathx = require('node:path');
+const { createServer, loadConfig: baseConfig } = require('../src/server');
+const TMP = fsx.mkdtempSync(pathx.join(os.tmpdir(), 'siart-t1-'));
+const loadConfig = (env) => ({ ...baseConfig(env), dataDir: TMP });
+test.after(() => fsx.rmSync(TMP, { recursive: true, force: true }));
 
 // ---------- lib ----------
 test('validateChat aceita conversa válida e remove espaços', () => {
@@ -25,23 +31,6 @@ test('validateChat aplica limites de tamanho', () => {
   assert.equal(validateChat({ messages: [{ role: 'user', content: 'a'.repeat(8001) }] }).ok, false);
   const many = Array.from({ length: 41 }, () => ({ role: 'user', content: 'a' }));
   assert.equal(validateChat({ messages: many }).ok, false);
-});
-
-test('validateChat aceita anexos de texto e imagem válidos', () => {
-  const image = 'data:image/png;base64,aGVsbG8=';
-  const r = validateChat({ messages: [{ role: 'user', content: [
-    { type: 'text', text: 'Analise este arquivo' },
-    { type: 'image_url', image_url: { url: image } },
-  ] }] });
-  assert.equal(r.ok, true);
-  assert.equal(r.messages[0].content[1].image_url.url, image);
-});
-
-test('validateChat rejeita URL de imagem externa em anexo', () => {
-  const r = validateChat({ messages: [{ role: 'user', content: [
-    { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
-  ] }] });
-  assert.equal(r.ok, false);
 });
 
 test('safeStaticPath bloqueia path traversal', () => {
@@ -172,7 +161,9 @@ test('health, status, estáticos e cabeçalhos de segurança', async () => {
   const health = await fetch(`${base}/health`);
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { status: 'ok' });
-  assert.deepEqual(await (await fetch(`${base}/api/status`)).json(), { ready: true });
+  const st = await (await fetch(`${base}/api/status`)).json();
+  assert.equal(st.ready, true);
+  assert.equal(st.locked, false);
 
   const index = await fetch(`${base}/`);
   assert.equal(index.status, 200);

@@ -10,8 +10,18 @@ services:
       - key: NODE_VERSION
         value: "20"
       - key: GROQ_API_KEY
-        sync: false
+        sync: false          # você preenche no painel do Render
+      - key: ACCESS_CODE
+        sync: false          # recomendado: senha de acesso ao site
       - key: GROQ_MODEL
         value: openai/gpt-oss-120b
       - key: TRUST_PROXY
         value: "1"
+      - key: DATA_DIR
+        value: /var/data
+    # Para os arquivos dos projetos sobreviverem a reinicializações e deploys,
+    # use um plano pago e descomente o disco abaixo (o plano gratuito apaga o disco local):
+    # disk:
+    #   name: siart-data
+    #   mountPath: /var/data
+    #   sizeGB: 1

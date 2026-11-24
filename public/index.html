@@ -25,8 +25,9 @@
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></symbol>
-    <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m8 12.5 7.2-7.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></symbol>
   </defs>
 </svg>
 
@@ -43,24 +44,87 @@
     <header class="topbar">
       <button id="menu" class="icon-btn" type="button" aria-label="Abrir conversas"><svg class="ico"><use href="#i-menu"/></svg></button>
       <h1 id="title">Nova conversa</h1>
+      <button id="open-project" class="btn-project" type="button" aria-expanded="false" aria-controls="project"><svg class="ico"><use href="#i-folder"/></svg><span>Projeto</span></button>
     </header>
     <div id="banner" class="banner" role="alert" hidden></div>
     <div id="messages" role="log" aria-live="polite" tabindex="-1"></div>
-    <div id="activity" class="activity" hidden aria-live="polite"><svg class="logo moon-spin"><use href="#moon"/></svg><div class="activity-copy"><strong id="activity-title">Analisando sua solicitação</strong><span id="activity-detail" class="shimmer">Organizando a melhor abordagem...</span></div></div>
     <form id="composer" autocomplete="off">
-      <div id="attachments" class="attachments" hidden></div>
       <div class="box">
-        <button id="attach" class="attach" type="button" aria-label="Anexar fotos ou arquivos"><svg class="ico"><use href="#i-paperclip"/></svg></button>
-        <input id="file-input" type="file" hidden multiple accept="image/png,image/jpeg,image/webp,image/gif,.txt,.md,.json,.js,.ts,.jsx,.tsx,.html,.css,.py,.java,.c,.cpp,.cs,.go,.rs,.sql,.xml,.yml,.yaml,.sh,.env,.log">
         <label for="input" class="sr">Mensagem para a Siart</label>
         <textarea id="input" rows="1" maxlength="8000" placeholder="Escreva para a Siart"></textarea>
         <button id="send" class="send" type="submit" aria-label="Enviar mensagem"><svg class="ico"><use href="#i-send"/></svg></button>
       </div>
-      <p class="hint">Enter envia · Shift+Enter quebra linha · Anexe imagens ou arquivos de código/texto (até 5 MB cada).</p>
+      <p class="hint">Enter envia, Shift+Enter quebra a linha. A Siart pode errar; confira o código antes de usar.</p>
     </form>
   </main>
+  <section id="project" class="project" aria-label="Projeto" hidden>
+    <div class="p-head">
+      <div class="seg" role="tablist" aria-label="Seções do projeto">
+        <button type="button" role="tab" data-view="files" aria-selected="true">Arquivos</button>
+        <button type="button" role="tab" data-view="editor" aria-selected="false">Editor</button>
+        <button type="button" role="tab" data-view="preview" aria-selected="false">Prévia</button>
+      </div>
+      <button id="p-close" class="icon-btn" type="button" aria-label="Fechar painel do projeto"><svg class="ico"><use href="#i-x"/></svg></button>
+    </div>
+
+    <div id="p-files" class="p-view" role="tabpanel">
+      <div class="p-tools">
+        <button id="f-new" class="btn-sm" type="button">Novo arquivo</button>
+        <button id="f-upload" class="btn-sm" type="button">Enviar texto</button>
+        <a id="f-zip" class="btn-sm" href="/api/export.zip" download="siart-projeto.zip">Exportar ZIP</a>
+        <input id="f-input" type="file" multiple hidden accept=".html,.htm,.css,.js,.mjs,.json,.md,.txt,.csv,.svg,.xml,.yml,.yaml,.ts,.tsx,.jsx,.py,.sql,.sh,.toml">
+      </div>
+      <ul id="f-list" class="f-list"></ul>
+      <p id="f-empty" class="p-note" hidden>O projeto está vazio. Peça à Siart para criar arquivos ou use "Novo arquivo".</p>
+      <p id="f-usage" class="p-note"></p>
+      <div class="p-foot">
+        <button id="f-wipe" class="btn-sm danger" type="button">Apagar todo o projeto</button>
+      </div>
+    </div>
+
+    <div id="p-editor" class="p-view" role="tabpanel" hidden>
+      <div id="e-tabs" class="e-tabs" role="tablist" aria-label="Arquivos abertos"></div>
+      <div id="e-body" hidden>
+        <div class="p-tools">
+          <button id="e-save" class="btn-sm" type="button">Salvar</button>
+          <button id="e-rename" class="btn-sm" type="button">Renomear</button>
+          <a id="e-download" class="btn-sm" href="#" download>Baixar</a>
+          <button id="e-delete" class="btn-sm danger" type="button">Excluir</button>
+        </div>
+        <label for="e-text" class="sr">Conteúdo do arquivo</label>
+        <textarea id="e-text" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
+      </div>
+      <p id="e-empty" class="p-note">Abra um arquivo na aba Arquivos para editar.</p>
+      <p id="e-status" class="p-note" role="status"></p>
+    </div>
+
+    <div id="p-preview" class="p-view" role="tabpanel" hidden>
+      <div class="p-tools">
+        <button id="v-reload" class="btn-sm" type="button">Atualizar prévia</button>
+        <div class="seg sm" role="group" aria-label="Tamanho da prévia">
+          <button type="button" data-size="full" aria-pressed="true">Total</button>
+          <button type="button" data-size="tablet" aria-pressed="false">Tablet</button>
+          <button type="button" data-size="phone" aria-pressed="false">Celular</button>
+        </div>
+      </div>
+      <p id="v-stale" class="p-note warn" hidden>Os arquivos mudaram desde o último carregamento. Atualize a prévia.</p>
+      <p id="v-empty" class="p-note" hidden>Crie um arquivo HTML (por exemplo index.html) para ver a prévia.</p>
+      <div id="v-frame" class="v-frame" data-size="full"><iframe id="v-iframe" title="Prévia do projeto" sandbox="allow-scripts allow-forms" referrerpolicy="no-referrer"></iframe></div>
+      <p class="p-note">A prévia roda isolada do restante da Siart. Ela não é um teste automático: confira o resultado você mesmo.</p>
+    </div>
+  </section>
 </div>
-<div id="preview-modal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Prévia do arquivo"><div class="modal-panel"><div class="modal-head"><strong id="preview-title">Prévia HTML</strong><button id="preview-close" class="icon-btn" type="button" aria-label="Fechar prévia">×</button></div><iframe id="preview-frame" sandbox="allow-forms allow-modals" title="Prévia do HTML"></iframe></div></div>
+<div id="login" class="login" hidden>
+  <form id="login-form" class="login-box">
+    <svg class="logo"><use href="#moon"/></svg>
+    <h2>Acesso restrito</h2>
+    <label for="code">Código de acesso</label>
+    <input id="code" type="password" autocomplete="current-password" required>
+    <button class="btn-new" type="submit">Entrar</button>
+    <p id="login-err" class="err" role="alert" hidden></p>
+  </form>
+</div>
 <script src="/app.js"></script>
+<script src="/project.js"></script>
 </body>
 </html>

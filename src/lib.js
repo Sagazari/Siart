@@ -15,26 +15,15 @@ function validateChat(body, limits = LIMITS) {
   let total = 0;
   const clean = [];
   for (const m of messages) {
-    if (!m || (m.role !== 'user' && m.role !== 'assistant') || !(typeof m.content === 'string' || Array.isArray(m.content))) {
-      return fail('Cada mensagem precisa de role (user ou assistant) e conteúdo válido.');
+    if (!m || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string') {
+      return fail('Cada mensagem precisa de role (user ou assistant) e content em texto.');
     }
-    let content = m.content;
-    if (typeof content === 'string') {
-      content = content.trim();
-      if (!content) return fail('Mensagens vazias não são permitidas.');
-      if (content.length > limits.maxMessageChars) return fail(`Cada mensagem pode ter até ${limits.maxMessageChars} caracteres.`);
-      total += content.length;
-    } else {
-      if (m.role !== 'user' || content.length > 6) return fail('Anexos inválidos.');
-      const cleanParts = [];
-      for (const part of content) {
-        if (part?.type === 'text' && typeof part.text === 'string' && part.text.length <= limits.maxMessageChars) { total += part.text.length; cleanParts.push({ type: 'text', text: part.text }); }
-        else if (part?.type === 'image_url' && typeof part.image_url?.url === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(part.image_url.url) && part.image_url.url.length <= 5_500_000) cleanParts.push({ type: 'image_url', image_url: { url: part.image_url.url } });
-        else return fail('Tipo de anexo não suportado ou arquivo grande demais.');
-      }
-      content = cleanParts;
+    const content = m.content.trim();
+    if (!content) return fail('Mensagens vazias não são permitidas.');
+    if (content.length > limits.maxMessageChars) {
+      return fail(`Cada mensagem pode ter até ${limits.maxMessageChars} caracteres.`);
     }
-    if (total > limits.maxTotalChars) return fail('A conversa ficou longa demais. Inicie uma nova conversa.');
+    total += content.length;
     clean.push({ role: m.role, content });
   }
   if (total > limits.maxTotalChars) return fail('A conversa ficou longa demais. Inicie uma nova conversa.');
