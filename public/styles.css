@@ -313,3 +313,25 @@ body { letter-spacing: -.012em; }
 .voice-btn[data-state="unsupported"] { color: #d8a1a1; }
 @keyframes voice-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(145,168,216,.0); } 50% { box-shadow: 0 0 0 5px rgba(145,168,216,.10); } }
 @media (prefers-reduced-motion: reduce) { .voice-btn[data-state="listening"] { animation: none; } }
+
+
+/* Siart — acabamento sóbrio inspirado na linguagem visual da Mistral.
+   Sem brilho, neon, gradientes luminosos, sombras ou pulsos. */
+:root { --accent: #e66a3c; }
+*, *::before, *::after { box-shadow: none !important; text-shadow: none !important; filter: none !important; }
+.topbar { backdrop-filter: none !important; background: var(--bg) !important; }
+.work-head .logo { filter: none !important; }
+.work-current, .work-current.rise-in {
+  color: var(--text-2) !important;
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+  animation: rise-text .22s ease-out !important;
+}
+.voice-btn[data-state="listening"] { animation: none !important; }
+.voice-btn[data-state="listening"], .voice-btn[data-state="speaking"] {
+  color: var(--text) !important; background: var(--surface) !important; border-color: var(--border) !important;
+}
+.tier:has(input:checked) { outline: 1px solid var(--border-strong, var(--border)); }
+.box { backdrop-filter: none !important; }
+.btn-new, .chip, .send, .btn-project, .tier { transition: background-color .15s ease, border-color .15s ease !important; }

@@ -26,6 +26,7 @@
   let recognition = null;
   let voiceSpeaking = false;
   let voiceRestartTimer = null;
+  let voicePermissionStream = null;
 
   // ---------- Persistência (localStorage deste navegador) ----------
   function load() {
@@ -103,13 +104,22 @@
     }).join('');
   }
 
-  const TOOL_LABEL = {
-    list_project_files: 'Mapeando a estrutura do projeto', read_project_file: 'Analisando arquivo',
-    write_project_file: 'Construindo arquivo', apply_file_patch: 'Refinando implementação',
-    create_project_directory: 'Organizando diretórios', rename_project_file: 'Reorganizando arquivos',
-    generate_pdf: 'Preparando documento',
-  };
-  function initialWorkStage() { return 'Analisando sua solicitação...'; }
+  function toolStage(data) {
+    const path = data.path || data.to || data.from || '';
+    const cleanPath = String(path).replace(/^\/+/, '');
+    switch (data.tool) {
+      case 'list_project_files': return 'Lendo a estrutura atual do projeto';
+      case 'read_project_file': return cleanPath ? 'Lendo ' + cleanPath : 'Lendo arquivo do projeto';
+      case 'write_project_file': return cleanPath ? 'Escrevendo ' + cleanPath : 'Criando arquivo do projeto';
+      case 'apply_file_patch': return cleanPath ? 'Alterando trechos de ' + cleanPath : 'Aplicando alteração no código';
+      case 'create_project_directory': return cleanPath ? 'Criando a pasta ' + cleanPath : 'Criando diretório';
+      case 'rename_project_file': return data.from && data.to ? 'Movendo ' + data.from + ' para ' + data.to : 'Movendo arquivo do projeto';
+      case 'generate_pdf': return cleanPath ? 'Gerando o documento ' + cleanPath : 'Gerando PDF';
+      case 'search_web': return data.query ? 'Pesquisando na web: ' + data.query : 'Consultando fontes na web';
+      default: return 'Executando ' + String(data.tool || 'uma operação').replace(/_/g, ' ');
+    }
+  }
+  function initialWorkStage() { return 'Preparando a solicitação'; }
   const STATUS_TEXT = { running: 'em andamento', done: 'concluído', failed: 'falhou', cancelled: 'cancelado' };
 
   // ---------- Renderização ----------
@@ -353,11 +363,11 @@
           (reply.fallbacks ||= []).push({ text: data.fromName + ' ' + (REASON[data.reason] || 'falhou') + '. Usando ' + data.toName + '.' });
           refreshLast(reply);
         } else if (event === 'tool.started') {
-          reply.stage = TOOL_LABEL[data.tool] || 'Executando uma etapa da tarefa...';
+          reply.stage = toolStage(data);
           refreshLast(reply);
         } else if (event === 'tool.completed' || event === 'tool.failed') {
-          if (event === 'tool.failed') reply.stage = 'Reavaliando a etapa e preparando uma alternativa...';
-          else reply.stage = 'Integrando os resultados...';
+          if (event === 'tool.failed') reply.stage = data.message ? 'Ajustando após falha em ' + (data.path || data.tool || 'uma operação') : 'Ajustando a operação que falhou';
+          else reply.stage = data.path ? 'Concluiu a alteração em ' + data.path : 'Operação concluída';
           refreshLast(reply);
           if (event === 'tool.completed' && data.mutated && window.SiartProject) window.SiartProject.onMutation(data.path);
         } else if (event === 'task.failed') {
@@ -472,6 +482,7 @@
   if (el.voice) el.voice.addEventListener('click', () => {
     if (voiceActive) {
       voiceActive = false; voiceSpeaking = false; stopListening();
+      if (voicePermissionStream) { voicePermissionStream.getTracks().forEach((track) => track.stop()); voicePermissionStream = null; }
       if ('speechSynthesis' in window) window.speechSynthesis.cancel();
       setVoiceState('off');
       return;
@@ -479,7 +490,27 @@
     if (!speechRecognitionConstructor()) { setVoiceState('unsupported'); showNotice('Seu navegador não oferece reconhecimento de voz. Tente abrir a Siart no Chrome atualizado.'); return; }
     voiceActive = true;
     if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
-    startListening();
+    // SpeechRecognition nem sempre dispara o prompt de permissão no Chrome Android.
+    // getUserMedia solicita a permissão explicitamente após o toque do usuário.
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      voiceActive = false;
+      setVoiceState('off');
+      showNotice('Este navegador não disponibilizou acesso ao microfone. Atualize o Chrome e tente novamente.');
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      voicePermissionStream = stream;
+      stream.getTracks().forEach((track) => track.stop());
+      voicePermissionStream = null;
+      if (voiceActive) startListening();
+    }).catch((error) => {
+      voiceActive = false;
+      setVoiceState('off');
+      const denied = error && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError');
+      showNotice(denied
+        ? 'O Chrome bloqueou o microfone para este site. Verifique a permissão do site e tente novamente.'
+        : 'Não foi possível iniciar o microfone (' + ((error && error.name) || 'erro desconhecido') + ').');
+    });
   });
 
   // Seletor discreto de modelo: abre apenas quando solicitado.
