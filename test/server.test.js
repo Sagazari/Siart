@@ -12,6 +12,49 @@ const loadConfig = (env) => ({ ...baseConfig(env), dataDir: TMP });
 test.after(() => fsx.rmSync(TMP, { recursive: true, force: true }));
 
 // ---------- lib ----------
+
+
+test('mensagem multimodal com imagem é validada', () => {
+  const { validateChat } = require('../src/lib');
+  const result = validateChat({ messages: [
+    { role: 'user', content: [
+      { type: 'text', text: 'O que aparece nesta foto?' },
+      { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,Zm9v' } },
+    ] },
+  ] });
+  assert.equal(result.ok, true);
+  assert.equal(result.messages[0].content[1].type, 'image_url');
+});
+
+test('imagem com esquema ou formato inválido é recusada', () => {
+  const { validateChat } = require('../src/lib');
+  const result = validateChat({ messages: [
+    { role: 'user', content: [
+      { type: 'image_url', image_url: { url: 'javascript:alert(1)' } },
+    ] },
+  ] });
+  assert.equal(result.ok, false);
+});
+
+test('histórico com resposta longa do assistente não bloqueia novas mensagens', () => {
+  const { validateChat } = require('../src/lib');
+  const result = validateChat({ messages: [
+    { role: 'user', content: 'Oi' },
+    { role: 'assistant', content: 'x'.repeat(12000) },
+    { role: 'user', content: 'Tudo bem?' },
+  ] });
+  assert.equal(result.ok, true);
+  assert.equal(result.messages[1].content.length, 8000);
+  assert.equal(result.messages[2].content, 'Tudo bem?');
+});
+
+test('mensagem nova do usuário acima de 8.000 caracteres continua sendo recusada', () => {
+  const { validateChat } = require('../src/lib');
+  const result = validateChat({ messages: [{ role: 'user', content: 'x'.repeat(8001) }] });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /8000/);
+});
+
 test('validateChat aceita conversa válida e remove espaços', () => {
   const r = validateChat({ messages: [{ role: 'user', content: '  oi  ' }] });
   assert.equal(r.ok, true);

@@ -64,7 +64,10 @@
         <span id="limit-text"></span>
         <button id="limit-new" class="btn-sm" type="button">Nova conversa</button>
       </div>
+      <div id="attachment-list" class="attachment-list" aria-live="polite" hidden></div>
       <div class="box">
+        <button id="attach" class="attach-btn" type="button" aria-label="Anexar fotos ou arquivos" title="Anexar fotos ou arquivos">＋</button>
+        <input id="attachment-input" type="file" multiple hidden accept="image/*,.txt,.md,.csv,.json,.html,.htm,.css,.js,.mjs,.ts,.tsx,.jsx,.py,.sql,.xml,.yml,.yaml,.toml,.log">
         <label for="input" class="sr">Mensagem para a Siart</label>
         <textarea id="input" rows="1" maxlength="8000" placeholder="Escreva para a Siart"></textarea>
         <button id="voice" class="voice-btn" type="button" aria-label="Iniciar conversa por voz" title="Conversar por voz"><svg class="ico"><use href="#i-mic"/></svg></button>

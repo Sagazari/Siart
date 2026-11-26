@@ -5,25 +5,38 @@ const LIMITS = { maxMessages: 40, maxMessageChars: 8000, maxTotalChars: 60000 };
 
 function validateChat(body, limits = LIMITS) {
   const fail = (error) => ({ ok: false, error });
-  if (!body || typeof body !== 'object' || !Array.isArray(body.messages)) {
-    return fail('Formato inválido: envie { "messages": [...] }.');
-  }
+  if (!body || typeof body !== 'object' || !Array.isArray(body.messages)) return fail('Formato inválido: envie uma lista de mensagens.');
   const { messages } = body;
-  if (messages.length === 0 || messages.length > limits.maxMessages) {
-    return fail(`A conversa deve ter entre 1 e ${limits.maxMessages} mensagens.`);
-  }
+  if (messages.length === 0 || messages.length > limits.maxMessages) return fail(`A conversa deve ter entre 1 e ${limits.maxMessages} mensagens.`);
   let total = 0;
   const clean = [];
   for (const m of messages) {
-    if (!m || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string') {
-      return fail('Cada mensagem precisa de role (user ou assistant) e content em texto.');
-    }
-    const content = m.content.trim();
-    if (!content) return fail('Mensagens vazias não são permitidas.');
-    if (content.length > limits.maxMessageChars) {
-      return fail(`Cada mensagem pode ter até ${limits.maxMessageChars} caracteres.`);
-    }
-    total += content.length;
+    if (!m || (m.role !== 'user' && m.role !== 'assistant')) return fail('Mensagem inválida.');
+    let content = m.content;
+    if (typeof content === 'string') {
+      content = content.trim();
+      if (!content) return fail('Mensagens vazias não são permitidas.');
+      if (m.role === 'user' && content.length > limits.maxMessageChars) return fail(`Sua mensagem pode ter até ${limits.maxMessageChars} caracteres.`);
+      if (m.role === 'assistant' && content.length > limits.maxMessageChars) content = content.slice(-limits.maxMessageChars);
+      total += content.length;
+    } else if (Array.isArray(content) && m.role === 'user') {
+      if (content.length > 6) return fail('Envie no máximo 5 anexos por mensagem.');
+      const parts = [];
+      let textLength = 0;
+      for (const part of content) {
+        if (part?.type === 'text' && typeof part.text === 'string') {
+          textLength += part.text.length;
+          parts.push({ type: 'text', text: part.text.slice(0, limits.maxMessageChars) });
+        } else if (part?.type === 'image_url' && typeof part.image_url?.url === 'string') {
+          const url = part.image_url.url;
+          if (!/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(url) || url.length > 4_500_000) return fail('Imagem inválida ou muito grande. Tente uma imagem menor.');
+          parts.push({ type: 'image_url', image_url: { url } });
+        } else return fail('Tipo de anexo não suportado.');
+      }
+      if (textLength > limits.maxMessageChars) return fail(`Sua mensagem pode ter até ${limits.maxMessageChars} caracteres.`);
+      total += textLength;
+      content = parts;
+    } else return fail('O conteúdo da mensagem é inválido.');
     clean.push({ role: m.role, content });
   }
   if (total > limits.maxTotalChars) return fail('A conversa ficou longa demais. Inicie uma nova conversa.');

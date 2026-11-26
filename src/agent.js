@@ -167,7 +167,13 @@ async function completeWithFallback({ cfg, tier, candidates, buildBody, call, st
 
 // Conversa com o modelo; com workspace e ferramentas ligadas, repete (modelo -> ferramentas -> modelo).
 async function runAgent({ cfg, tier, messages, ws, send, signal, log, taskId, health }) {
-  const candidates = tier.chain.filter((c) => cfg.providers[c.provider] && cfg.providers[c.provider].apiKey);
+  const hasImages = messages.some((m) => Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'));
+  let candidates = tier.chain.filter((c) => cfg.providers[c.provider] && cfg.providers[c.provider].apiKey);
+  if (hasImages) {
+    const gemini = cfg.providers.gemini;
+    candidates = gemini && gemini.apiKey ? [{ provider: 'gemini', model: 'gemini-2.5-flash' }] : [];
+    if (!candidates.length) throw Object.assign(new Error('Para analisar fotos, configure GEMINI_API_KEY no Render. Os modelos configurados sem visão não conseguem interpretar imagens.'), { allFailed: true, tried: [] });
+  }
   if (!candidates.length) throw Object.assign(new Error('no providers'), { allFailed: true, tried: [] });
 
   const state = { toolsOn: Boolean(cfg.toolsEnabled && tier.tools && ws), announced: null };

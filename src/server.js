@@ -17,7 +17,7 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8', '.csv': 'text/csv; charset=utf-8', '.xml': 'application/xml; charset=utf-8',
   '.pdf': 'application/pdf',
 };
-const MAX_CHAT_BODY = 512 * 1024;
+const MAX_CHAT_BODY = 12 * 1024 * 1024;
 const MAX_FILE_BODY = 700 * 1024;
 
 function loadConfig(env = process.env) {
@@ -82,7 +82,7 @@ function securityHeaders(res) {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; " +
-    "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-src 'self'; " +
+    "font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; frame-src 'self'; " +
     "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
 }
 

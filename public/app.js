@@ -2,7 +2,8 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const el = { sidebar: $('sidebar'), scrim: $('scrim'), list: $('chat-list'), title: $('title'), banner: $('banner'),
-    messages: $('messages'), form: $('composer'), input: $('input'), send: $('send'), voice: $('voice'), menu: $('menu'), newChat: $('new-chat') };
+    messages: $('messages'), form: $('composer'), input: $('input'), send: $('send'), voice: $('voice'), menu: $('menu'), newChat: $('new-chat'),
+    attach: $('attach'), attachmentInput: $('attachment-input'), attachmentList: $('attachment-list') };
   const ui = { tiers: $('tiers'), tierHint: $('tier-hint'), modelToggle: $('model-toggle'), modelPanel: $('model-panel'), notice: $('notice'), count: $('conv-count'), limitNote: $('limit-note'), limitText: $('limit-text'), limitNew: $('limit-new') };
   const STORE = 'siart.v1';
   const SUGGESTIONS = [
@@ -27,6 +28,7 @@
   let voiceSpeaking = false;
   let voiceRestartTimer = null;
   let voicePermissionStream = null;
+  let pendingAttachments = [];
 
   // ---------- Persistência (localStorage deste navegador) ----------
   function load() {
@@ -44,6 +46,7 @@
   // ---------- Markdown mínimo e seguro (tudo é escapado antes de virar HTML) ----------
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const inline = (s) => esc(s)
+    .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, '<img class="answer-image" src="$2" alt="$1" loading="lazy" referrerpolicy="no-referrer">')
     .replace(/`([^`\n]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>')
@@ -104,22 +107,13 @@
     }).join('');
   }
 
-  function toolStage(data) {
-    const path = data.path || data.to || data.from || '';
-    const cleanPath = String(path).replace(/^\/+/, '');
-    switch (data.tool) {
-      case 'list_project_files': return 'Lendo a estrutura atual do projeto';
-      case 'read_project_file': return cleanPath ? 'Lendo ' + cleanPath : 'Lendo arquivo do projeto';
-      case 'write_project_file': return cleanPath ? 'Escrevendo ' + cleanPath : 'Criando arquivo do projeto';
-      case 'apply_file_patch': return cleanPath ? 'Alterando trechos de ' + cleanPath : 'Aplicando alteração no código';
-      case 'create_project_directory': return cleanPath ? 'Criando a pasta ' + cleanPath : 'Criando diretório';
-      case 'rename_project_file': return data.from && data.to ? 'Movendo ' + data.from + ' para ' + data.to : 'Movendo arquivo do projeto';
-      case 'generate_pdf': return cleanPath ? 'Gerando o documento ' + cleanPath : 'Gerando PDF';
-      case 'search_web': return data.query ? 'Pesquisando na web: ' + data.query : 'Consultando fontes na web';
-      default: return 'Executando ' + String(data.tool || 'uma operação').replace(/_/g, ' ');
-    }
-  }
-  function initialWorkStage() { return 'Preparando a solicitação'; }
+  const TOOL_LABEL = {
+    list_project_files: 'Mapeando a estrutura do projeto', read_project_file: 'Analisando arquivo',
+    write_project_file: 'Construindo arquivo', apply_file_patch: 'Refinando implementação',
+    create_project_directory: 'Organizando diretórios', rename_project_file: 'Reorganizando arquivos',
+    generate_pdf: 'Preparando documento',
+  };
+  function initialWorkStage() { return 'Analisando sua solicitação...'; }
   const STATUS_TEXT = { running: 'em andamento', done: 'concluído', failed: 'falhou', cancelled: 'cancelado' };
 
   // ---------- Renderização ----------
@@ -168,7 +162,16 @@
     }
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    if (m.role === 'user') bubble.textContent = m.content;
+    if (m.role === 'user') {
+      bubble.textContent = m.content || '';
+      (m.attachments || []).forEach((a) => {
+        if (a.dataUrl && a.type && a.type.startsWith('image/')) {
+          const img = document.createElement('img'); img.className = 'user-image'; img.src = a.dataUrl; img.alt = a.name || 'Imagem enviada'; img.loading = 'lazy'; bubble.append(img);
+        } else {
+          const tag = document.createElement('div'); tag.className = 'user-file'; tag.textContent = '▤ ' + (a.name || 'Arquivo'); bubble.append(tag);
+        }
+      });
+    }
     else if (live && !m.content && !(m.fallbacks && m.fallbacks.length)) {
       bubble.textContent = ''; // sem animação duplicada de três pontos; o status da Lua já indica atividade
     } else bubble.innerHTML = md(m.content);
@@ -319,7 +322,65 @@
     }
   }
 
-  async function sendMessage(text) {
+
+  function renderPendingAttachments() {
+    if (!el.attachmentList) return;
+    el.attachmentList.textContent = '';
+    el.attachmentList.hidden = pendingAttachments.length === 0;
+    pendingAttachments.forEach((a, index) => {
+      const item = document.createElement('div'); item.className = 'attachment-chip';
+      if (a.dataUrl) { const img = document.createElement('img'); img.src = a.dataUrl; img.alt = ''; item.append(img); }
+      const name = document.createElement('span'); name.textContent = a.name; item.append(name);
+      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.setAttribute('aria-label', 'Remover ' + a.name);
+      remove.addEventListener('click', () => { pendingAttachments.splice(index, 1); renderPendingAttachments(); });
+      item.append(remove); el.attachmentList.append(item);
+    });
+  }
+  function imageToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Não foi possível ler ' + file.name));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Imagem inválida: ' + file.name));
+        img.onload = () => {
+          const max = 1600, scale = Math.min(1, max / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(img.width * scale)); canvas.height = Math.max(1, Math.round(img.height * scale));
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', 0.78));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  const TEXT_EXT = new Set(['txt','md','csv','json','html','htm','css','js','mjs','ts','tsx','jsx','py','sql','xml','yml','yaml','toml','log']);
+  async function addAttachments(fileList) {
+    const files = [...fileList];
+    if (pendingAttachments.length + files.length > 5) { showNotice('Envie até 5 arquivos por mensagem.'); return; }
+    for (const file of files) {
+      try {
+        if (file.type.startsWith('image/')) {
+          if (file.size > 12 * 1024 * 1024) throw new Error('A imagem deve ter até 12 MB.');
+          const dataUrl = await imageToDataUrl(file);
+          pendingAttachments.push({ name: file.name, type: 'image/jpeg', dataUrl });
+        } else {
+          const ext = (file.name.split('.').pop() || '').toLowerCase();
+          if (!TEXT_EXT.has(ext)) throw new Error('Formato não suportado nesta versão. Use imagem ou arquivo de texto/código.');
+          if (file.size > 300 * 1024) throw new Error('Arquivos de texto devem ter até 300 KB.');
+          const content = await file.text();
+          pendingAttachments.push({ name: file.name, type: file.type || 'text/plain', text: content.slice(0, 50000) });
+        }
+      } catch (err) { showNotice(err.message); }
+    }
+    renderPendingAttachments();
+  }
+  if (el.attach && el.attachmentInput) {
+    el.attach.addEventListener('click', () => el.attachmentInput.click());
+    el.attachmentInput.addEventListener('change', () => { addAttachments(el.attachmentInput.files); el.attachmentInput.value = ''; });
+  }
+  async function sendMessage(text, attachments = []) {
     if (streaming) return;
     let chat = active();
     if (!chat) {
@@ -327,8 +388,11 @@
       state.chats.push(chat);
       state.activeId = chat.id;
     }
-    chat.messages.push({ role: 'user', content: text });
-    if (chat.messages.length === 1) chat.title = text.replace(/\s+/g, ' ').slice(0, 48);
+    const attachmentCopy = attachments.map((a) => ({ ...a }));
+    const extraText = attachmentCopy.filter((a) => typeof a.text === 'string')
+      .map((a) => '\n\n[Conteúdo do arquivo ' + a.name + ']\n' + a.text).join('');
+    chat.messages.push({ role: 'user', content: text + extraText, attachments: attachmentCopy.map((a) => ({ name: a.name, type: a.type, dataUrl: a.dataUrl || null })) });
+    if (chat.messages.length === 1) chat.title = (text || attachmentCopy[0]?.name || 'Arquivo enviado').replace(/\s+/g, ' ').slice(0, 48);
     const reply = { role: 'assistant', content: '', working: true, stage: initialWorkStage() };
     chat.messages.push(reply);
     chat.updatedAt = Date.now();
@@ -337,7 +401,10 @@
     renderAll(chat.messages.length - 2);
 
     // Só mensagens com conteúdo vão ao servidor; o último item (resposta em branco) fica de fora.
-    const payload = chat.messages.slice(0, -1).filter((m) => m.content).map(({ role, content }) => ({ role, content }));
+    const payload = chat.messages.slice(0, -1).filter((m) => m.content || (m.attachments && m.attachments.length)).map((m) => {
+      const images = (m.attachments || []).filter((a) => a.dataUrl).map((a) => ({ type: 'image_url', image_url: { url: a.dataUrl } }));
+      return { role: m.role, content: images.length ? [{ type: 'text', text: m.content || 'Analise a imagem enviada.' }, ...images] : m.content };
+    });
     controller = new AbortController();
     try {
       const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tierId ? { messages: payload, tier: tierId } : { messages: payload }), signal: controller.signal });
@@ -363,11 +430,11 @@
           (reply.fallbacks ||= []).push({ text: data.fromName + ' ' + (REASON[data.reason] || 'falhou') + '. Usando ' + data.toName + '.' });
           refreshLast(reply);
         } else if (event === 'tool.started') {
-          reply.stage = toolStage(data);
+          reply.stage = TOOL_LABEL[data.tool] || 'Executando uma etapa da tarefa...';
           refreshLast(reply);
         } else if (event === 'tool.completed' || event === 'tool.failed') {
-          if (event === 'tool.failed') reply.stage = data.message ? 'Ajustando após falha em ' + (data.path || data.tool || 'uma operação') : 'Ajustando a operação que falhou';
-          else reply.stage = data.path ? 'Concluiu a alteração em ' + data.path : 'Operação concluída';
+          if (event === 'tool.failed') reply.stage = 'Reavaliando a etapa e preparando uma alternativa...';
+          else reply.stage = 'Integrando os resultados...';
           refreshLast(reply);
           if (event === 'tool.completed' && data.mutated && window.SiartProject) window.SiartProject.onMutation(data.path);
         } else if (event === 'task.failed') {
@@ -469,11 +536,12 @@
     if (!spoken) { restartListening(); return; }
     const utterance = new SpeechSynthesisUtterance(spoken);
     utterance.lang = 'pt-BR';
-    utterance.rate = 1.02;
-    utterance.pitch = 1.08;
+    utterance.rate = 0.96;
+    utterance.pitch = 1.0;
     const voices = window.speechSynthesis.getVoices();
     const pt = voices.filter(v => /^pt-BR/i.test(v.lang));
-    const femaleHint = /female|feminina|mulher|brasil|luciana|fernanda|camila|maria/i;
+    const femaleHint = /female|feminina|mulher|luciana|fernanda|camila|maria|francisca|bruna|helena/i;
+    // Prefere uma voz pt-BR com nome feminino quando o aparelho oferece essa opção.
     utterance.voice = pt.find(v => femaleHint.test(v.name)) || pt[0] || voices.find(v => /^pt/i.test(v.lang)) || null;
     utterance.onstart = () => { voiceSpeaking = true; setVoiceState('speaking'); };
     utterance.onend = utterance.onerror = () => { voiceSpeaking = false; if (voiceActive) restartListening(); else setVoiceState('off'); };
@@ -488,28 +556,24 @@
       return;
     }
     if (!speechRecognitionConstructor()) { setVoiceState('unsupported'); showNotice('Seu navegador não oferece reconhecimento de voz. Tente abrir a Siart no Chrome atualizado.'); return; }
-    voiceActive = true;
-    if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
-    // SpeechRecognition nem sempre dispara o prompt de permissão no Chrome Android.
-    // getUserMedia solicita a permissão explicitamente após o toque do usuário.
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      voiceActive = false;
-      setVoiceState('off');
-      showNotice('Este navegador não disponibilizou acesso ao microfone. Atualize o Chrome e tente novamente.');
+      showNotice('O Chrome não disponibilizou o microfone para esta página. Verifique se o site está aberto em HTTPS.');
       return;
     }
+    // O clique do usuário dispara o pedido real de permissão. SpeechRecognition,
+    // sozinho, pode retornar "not-allowed" sem abrir a caixa de autorização.
     navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
       voicePermissionStream = stream;
       stream.getTracks().forEach((track) => track.stop());
       voicePermissionStream = null;
-      if (voiceActive) startListening();
+      voiceActive = true;
+      if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
+      startListening();
     }).catch((error) => {
-      voiceActive = false;
-      setVoiceState('off');
       const denied = error && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError');
       showNotice(denied
-        ? 'O Chrome bloqueou o microfone para este site. Verifique a permissão do site e tente novamente.'
-        : 'Não foi possível iniciar o microfone (' + ((error && error.name) || 'erro desconhecido') + ').');
+        ? 'O Chrome negou o acesso ao microfone deste site.'
+        : 'Não foi possível acessar o microfone (' + ((error && error.name) || 'erro desconhecido') + ').');
     });
   });
 
@@ -541,13 +605,16 @@
     e.preventDefault();
     if (streaming) { controller && controller.abort(); return; }
     const text = el.input.value.trim();
-    if (!text) return;
+    if (!text && pendingAttachments.length === 0) return;
     const cur = active();
     if (cur && usable(cur) >= limits.maxMessages) { updateLimits(); ui.limitNote.classList.remove('shake'); void ui.limitNote.offsetWidth; ui.limitNote.classList.add('shake'); return; }
     if (!cur && state.chats.length >= limits.maxConversations && !makeRoom()) return;
     el.input.value = '';
     autosize();
-    sendMessage(text);
+    const files = pendingAttachments;
+    pendingAttachments = [];
+    renderPendingAttachments();
+    sendMessage(text, files);
   });
   el.newChat.addEventListener('click', () => {
     if (streaming) return;
