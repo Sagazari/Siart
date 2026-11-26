@@ -2,7 +2,7 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const el = { sidebar: $('sidebar'), scrim: $('scrim'), list: $('chat-list'), title: $('title'), banner: $('banner'),
-    messages: $('messages'), form: $('composer'), input: $('input'), send: $('send'), menu: $('menu'), newChat: $('new-chat') };
+    messages: $('messages'), form: $('composer'), input: $('input'), send: $('send'), voice: $('voice'), menu: $('menu'), newChat: $('new-chat') };
   const ui = { tiers: $('tiers'), tierHint: $('tier-hint'), modelToggle: $('model-toggle'), modelPanel: $('model-panel'), notice: $('notice'), count: $('conv-count'), limitNote: $('limit-note'), limitText: $('limit-text'), limitNew: $('limit-new') };
   const STORE = 'siart.v1';
   const SUGGESTIONS = [
@@ -22,6 +22,10 @@
   let state = load();
   let streaming = false;
   let controller = null;
+  let voiceActive = false;
+  let recognition = null;
+  let voiceSpeaking = false;
+  let voiceRestartTimer = null;
 
   // ---------- Persistência (localStorage deste navegador) ----------
   function load() {
@@ -372,9 +376,111 @@
       chat.updatedAt = Date.now();
       save();
       renderAll();
+      if (voiceActive && reply.content) speakVoice(reply.content);
+      else if (voiceActive) restartListening();
       el.input.focus();
     }
   }
+
+  // ---------- Siart Voice: reconhecimento e síntese nativos do navegador ----------
+  function speechRecognitionConstructor() {
+    return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  }
+  function setVoiceState(state) {
+    if (!el.voice) return;
+    el.voice.dataset.state = state;
+    const labels = { off: 'Iniciar conversa por voz', listening: 'Ouvindo você', speaking: 'A Siart está falando', unsupported: 'Voz não disponível neste navegador' };
+    el.voice.setAttribute('aria-label', labels[state] || labels.off);
+    el.voice.title = labels[state] || labels.off;
+    el.voice.innerHTML = '<svg class="ico"><use href="#' + (state === 'listening' ? 'i-mic' : state === 'speaking' ? 'i-volume' : 'i-mic') + '"/></svg>';
+  }
+  function stopListening() {
+    if (recognition) { try { recognition.onend = null; recognition.stop(); } catch {} recognition = null; }
+    clearTimeout(voiceRestartTimer);
+  }
+  function restartListening() {
+    if (!voiceActive || streaming || voiceSpeaking) return;
+    clearTimeout(voiceRestartTimer);
+    voiceRestartTimer = setTimeout(startListening, 450);
+  }
+  function startListening() {
+    if (!voiceActive || streaming || voiceSpeaking || recognition) return;
+    const SpeechRecognition = speechRecognitionConstructor();
+    if (!SpeechRecognition) { setVoiceState('unsupported'); voiceActive = false; return; }
+    const rec = new SpeechRecognition();
+    recognition = rec;
+    rec.lang = 'pt-BR';
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    let finalText = '';
+    rec.onstart = () => setVoiceState('listening');
+    rec.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const phrase = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalText += phrase;
+        else interim += phrase;
+      }
+      if (interim) { el.input.value = interim; autosize(); }
+      if (finalText.trim()) {
+        const spoken = finalText.trim();
+        el.input.value = spoken;
+        autosize();
+        recognition = null;
+        try { rec.stop(); } catch {}
+        const current = active();
+        if ((!current || usable(current) < limits.maxMessages) && !streaming) {
+          el.input.value = '';
+          autosize();
+          sendMessage(spoken);
+        } else restartListening();
+      }
+    };
+    rec.onerror = (event) => {
+      recognition = null;
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        voiceActive = false; setVoiceState('off'); showNotice('Permita o acesso ao microfone para conversar por voz.');
+      } else if (event.error !== 'aborted' && voiceActive) restartListening();
+    };
+    rec.onend = () => { if (recognition === rec) recognition = null; restartListening(); };
+    try { rec.start(); } catch { recognition = null; restartListening(); }
+  }
+  function cleanSpeechText(text) {
+    return String(text || '').replace(/```[\s\S]*?```/g, ' Código omitido. ')
+      .replace(/`([^`]+)`/g, '$1').replace(/https?:\/\/\S+/g, 'link')
+      .replace(/[#*_>|]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function speakVoice(text) {
+    if (!('speechSynthesis' in window)) { restartListening(); return; }
+    stopListening();
+    window.speechSynthesis.cancel();
+    const spoken = cleanSpeechText(text);
+    if (!spoken) { restartListening(); return; }
+    const utterance = new SpeechSynthesisUtterance(spoken);
+    utterance.lang = 'pt-BR';
+    utterance.rate = 1.02;
+    utterance.pitch = 1.08;
+    const voices = window.speechSynthesis.getVoices();
+    const pt = voices.filter(v => /^pt-BR/i.test(v.lang));
+    const femaleHint = /female|feminina|mulher|brasil|luciana|fernanda|camila|maria/i;
+    utterance.voice = pt.find(v => femaleHint.test(v.name)) || pt[0] || voices.find(v => /^pt/i.test(v.lang)) || null;
+    utterance.onstart = () => { voiceSpeaking = true; setVoiceState('speaking'); };
+    utterance.onend = utterance.onerror = () => { voiceSpeaking = false; if (voiceActive) restartListening(); else setVoiceState('off'); };
+    window.speechSynthesis.speak(utterance);
+  }
+  if (el.voice) el.voice.addEventListener('click', () => {
+    if (voiceActive) {
+      voiceActive = false; voiceSpeaking = false; stopListening();
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      setVoiceState('off');
+      return;
+    }
+    if (!speechRecognitionConstructor()) { setVoiceState('unsupported'); showNotice('Seu navegador não oferece reconhecimento de voz. Tente abrir a Siart no Chrome atualizado.'); return; }
+    voiceActive = true;
+    if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
+    startListening();
+  });
 
   // Seletor discreto de modelo: abre apenas quando solicitado.
   if (ui.modelToggle && ui.modelPanel) {

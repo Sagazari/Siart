@@ -23,6 +23,8 @@
     <symbol id="moon" viewBox="0 0 32 32"><circle cx="15" cy="17" r="12" fill="url(#silver)" mask="url(#moon-mask)"/></symbol>
     <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4zm12-1a6 6 0 0 1 0 8m2-11a10 10 0 0 1 0 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-4 0h8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
     <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -65,6 +67,7 @@
       <div class="box">
         <label for="input" class="sr">Mensagem para a Siart</label>
         <textarea id="input" rows="1" maxlength="8000" placeholder="Escreva para a Siart"></textarea>
+        <button id="voice" class="voice-btn" type="button" aria-label="Iniciar conversa por voz" title="Conversar por voz"><svg class="ico"><use href="#i-mic"/></svg></button>
         <button id="send" class="send" type="submit" aria-label="Enviar mensagem"><svg class="ico"><use href="#i-send"/></svg></button>
       </div>
       <p class="hint">Enter envia, Shift+Enter quebra a linha. A Siart pode errar; confira o código antes de usar.</p>
