@@ -97,7 +97,7 @@ test('chat transmite eventos estruturados e envia a chave só ao provedor', asyn
     });
   });
   const mockPort = mock.address().port;
-  const server = createServer({ ...loadConfig({}), apiKey: 'gsk_teste', baseUrl: `http://127.0.0.1:${mockPort}/v1` });
+  const server = createServer(loadConfig({ GROQ_API_KEY: 'gsk_teste', GROQ_BASE_URL: `http://127.0.0.1:${mockPort}/v1` }));
   const port = await listen(server);
 
   const res = await post(port, userMsg);
@@ -105,7 +105,7 @@ test('chat transmite eventos estruturados e envia a chave só ao provedor', asyn
   assert.match(res.headers.get('content-type'), /text\/event-stream/);
   const events = await parseEvents(res);
   const names = events.map((e) => e.event);
-  assert.deepEqual(names, ['task.started', 'message.delta', 'message.delta', 'message.completed', 'task.completed']);
+  assert.deepEqual(names, ['task.started', 'model.selected', 'message.delta', 'message.delta', 'message.completed', 'task.completed']);
   assert.equal(events.filter((e) => e.event === 'message.delta').map((e) => e.data.text).join(''), 'Olá, mundo');
   assert.ok(events.every((e) => e.data.taskId && e.data.ts));
   assert.equal(seen.auth, 'Bearer gsk_teste');
@@ -119,20 +119,21 @@ test('chat transmite eventos estruturados e envia a chave só ao provedor', asyn
 
 test('chat devolve task.failed amigável sem vazar detalhes do provedor', async () => {
   const mock = await startMock((req, res) => { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end('{"error":"segredo-interno"}'); });
-  const server = createServer({ ...loadConfig({}), apiKey: 'k', baseUrl: `http://127.0.0.1:${mock.address().port}/v1` });
+  const server = createServer(loadConfig({ GROQ_API_KEY: 'k', GROQ_BASE_URL: `http://127.0.0.1:${mock.address().port}/v1` }));
   const port = await listen(server);
 
   const events = await parseEvents(await post(port, userMsg));
   const failed = events.find((e) => e.event === 'task.failed');
   assert.ok(failed);
-  assert.equal(failed.data.code, 'upstream_401');
+  assert.equal(failed.data.code, 'all_providers_failed');
+  assert.deepEqual(failed.data.tried, [{ provider: 'groq', reason: 'auth' }]);
   assert.ok(!JSON.stringify(failed).includes('segredo-interno'));
 
   await close(server); await close(mock);
 });
 
 test('chat responde 503 sem GROQ_API_KEY e 400 para entrada inválida', async () => {
-  const server = createServer({ ...loadConfig({}), apiKey: '' });
+  const server = createServer(loadConfig({}));
   const port = await listen(server);
   assert.equal((await post(port, userMsg)).status, 503);
   assert.equal((await post(port, { messages: 'x' })).status, 400);
@@ -142,7 +143,7 @@ test('chat responde 503 sem GROQ_API_KEY e 400 para entrada inválida', async ()
 });
 
 test('chat aplica rate limit e bloqueia origem externa', async () => {
-  const server = createServer({ ...loadConfig({}), apiKey: '', rateMax: 2 });
+  const server = createServer(loadConfig({ RATE_LIMIT_MAX: '2' }));
   const port = await listen(server);
   assert.equal((await post(port, userMsg, { Origin: 'https://evil.example' })).status, 403);
   assert.equal((await post(port, userMsg)).status, 503);
@@ -154,7 +155,7 @@ test('chat aplica rate limit e bloqueia origem externa', async () => {
 });
 
 test('health, status, estáticos e cabeçalhos de segurança', async () => {
-  const server = createServer({ ...loadConfig({}), apiKey: 'k' });
+  const server = createServer(loadConfig({ GROQ_API_KEY: 'k' }));
   const port = await listen(server);
   const base = `http://127.0.0.1:${port}`;
 

@@ -3,9 +3,10 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { validateChat, createRateLimiter, safeStaticPath } = require('./lib');
+const { validateChat, createRateLimiter, safeStaticPath, LIMITS: CHAT_LIMITS } = require('./lib');
 const { createWorkspace, purgeIdle, WorkspaceError, LIMITS } = require('./workspace');
-const { runAgent } = require('./agent');
+const { runAgent, createHealth } = require('./agent');
+const { buildProviders, buildTiers, tierAvailable } = require('./providers');
 const auth = require('./auth');
 
 const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
@@ -16,39 +17,35 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8', '.csv': 'text/csv; charset=utf-8', '.xml': 'application/xml; charset=utf-8',
   '.pdf': 'application/pdf',
 };
-const MAX_CHAT_BODY = 256 * 1024;
+const MAX_CHAT_BODY = 512 * 1024;
 const MAX_FILE_BODY = 700 * 1024;
 
 function loadConfig(env = process.env) {
   const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
+  const tiers = buildTiers(env, (tier, bad) => console.warn(JSON.stringify({ level: 'warn', event: 'invalid_tier_entry', tier, entry: bad })));
+  const defaultTier = tiers[String(env.DEFAULT_TIER || '').toLowerCase()] ? String(env.DEFAULT_TIER).toLowerCase() : 'moyenne';
   return {
     port: num(env.PORT, 3000),
-    apiKey: env.GROQ_API_KEY || '',
-    model: env.GROQ_MODEL || 'openai/gpt-oss-120b',
-    baseUrl: (env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, ''),
+    providers: buildProviders(env),
+    tiers,
+    defaultTier,
     allowedOrigin: env.ALLOWED_ORIGIN || '',
     trustProxy: env.TRUST_PROXY === '1',
     rateMax: num(env.RATE_LIMIT_MAX, 20),
     rateWindowMs: num(env.RATE_LIMIT_WINDOW_MS, 60_000),
     apiRateMax: num(env.API_RATE_LIMIT_MAX, 240),
-    timeoutMs: num(env.UPSTREAM_TIMEOUT_MS, 120_000),
-    maxTokens: num(env.MAX_COMPLETION_TOKENS, 4096),
+    timeoutMs: num(env.UPSTREAM_TIMEOUT_MS, 180_000),
     toolsEnabled: env.TOOLS_ENABLED !== '0',
     maxToolSteps: num(env.MAX_TOOL_STEPS, 6),
     dataDir: path.resolve(env.DATA_DIR || path.join(process.cwd(), 'data')),
     accessCode: env.ACCESS_CODE || '',
     retentionDays: num(env.RETENTION_DAYS, 30),
+    maxConversations: Math.min(num(env.MAX_CONVERSATIONS, 30), 500),
+    maxMessages: Math.min(num(env.MAX_MESSAGES_PER_CONVERSATION, 40), 200),
   };
 }
 
 const log = (obj) => console.log(JSON.stringify({ ts: new Date().toISOString(), ...obj }));
-
-function friendlyUpstreamError(status) {
-  if (status === 401 || status === 403) return 'O provedor não aceitou a chave de API. Verifique GROQ_API_KEY no servidor.';
-  if (status === 400 || status === 404) return 'O modelo configurado não está disponível ou a requisição foi rejeitada. Verifique GROQ_MODEL.';
-  if (status === 429) return 'O limite do provedor de IA foi atingido. Tente novamente em instantes.';
-  return 'O provedor de IA retornou um erro. Tente novamente.';
-}
 
 function sendJson(res, status, obj, headers = {}) {
   const body = JSON.stringify(obj);
@@ -104,6 +101,7 @@ function createServer(cfg = loadConfig()) {
   const chatLimiter = createRateLimiter({ max: cfg.rateMax, windowMs: cfg.rateWindowMs });
   const apiLimiter = createRateLimiter({ max: cfg.apiRateMax, windowMs: cfg.rateWindowMs });
   const loginLimiter = createRateLimiter({ max: 10, windowMs: 5 * 60_000 });
+  const health = createHealth();
   const workspaces = new Map();
   const tokenToClient = new Map();
   const clientToToken = new Map();
@@ -154,9 +152,16 @@ function createServer(cfg = loadConfig()) {
   async function handleChat(req, res, cid) {
     const body = await readJson(req, res, MAX_CHAT_BODY);
     if (!body) return;
-    const v = validateChat(body);
+    const v = validateChat(body, { ...CHAT_LIMITS, maxMessages: cfg.maxMessages, maxTotalChars: 120000 });
     if (!v.ok) return sendJson(res, 400, { error: v.error });
-    if (!cfg.apiKey) return sendJson(res, 503, { error: 'Servidor sem configuração: defina GROQ_API_KEY.' });
+    let tier = cfg.tiers[cfg.defaultTier];
+    if (body.tier !== undefined) {
+      tier = typeof body.tier === 'string' ? cfg.tiers[body.tier] : null;
+      if (!tier) return sendJson(res, 400, { error: 'Nível de IA desconhecido.' });
+    }
+    if (!tierAvailable(tier, cfg.providers)) {
+      return sendJson(res, 503, { error: `Nenhum provedor está configurado para ${tier.label}. Defina ao menos uma chave de API no servidor.` });
+    }
 
     const taskId = crypto.randomUUID();
     let clientClosed = false;
@@ -172,20 +177,21 @@ function createServer(cfg = loadConfig()) {
       res.write(`event: ${event}\ndata: ${JSON.stringify({ taskId, ts: new Date().toISOString(), ...data })}\n\n`);
     };
 
-    send('task.started');
+    send('task.started', { tier: tier.id });
     try {
-      await runAgent({ cfg, messages: v.messages, ws: cfg.toolsEnabled ? getWs(cid) : null, send, signal: ac.signal, log, taskId });
+      await runAgent({ cfg, tier, messages: v.messages, ws: cfg.toolsEnabled && tier.tools ? getWs(cid) : null, send, signal: ac.signal, log, taskId, health });
       send('message.completed');
       send('task.completed');
     } catch (err) {
       if (!clientClosed) {
         const timedOut = ac.signal.aborted;
-        log({ level: 'error', event: 'upstream_failure', taskId, reason: timedOut ? 'timeout' : (err.upstreamStatus || err.name) });
-        if (err.upstreamStatus) send('task.failed', { code: `upstream_${err.upstreamStatus}`, message: friendlyUpstreamError(err.upstreamStatus) });
-        else send('task.failed', {
-          code: timedOut ? 'timeout' : 'upstream_error',
-          message: timedOut ? 'A resposta demorou demais e foi interrompida.' : 'Não foi possível falar com o provedor de IA. Tente novamente.',
+        log({ level: 'error', event: 'chat_failure', taskId, tier: tier.id, reason: timedOut ? 'timeout' : (err.allFailed ? 'all_providers_failed' : err.upstreamStatus || err.name) });
+        if (timedOut) send('task.failed', { code: 'timeout', message: 'A resposta demorou demais e foi interrompida.' });
+        else if (err.allFailed) send('task.failed', {
+          code: 'all_providers_failed', tried: err.tried || [],
+          message: 'Nenhum provedor de IA conseguiu responder agora. Tente de novo em instantes ou escolha outro nível.',
         });
+        else send('task.failed', { code: 'upstream_error', message: 'A conexão com o provedor de IA foi interrompida. Tente novamente.' });
       }
     } finally {
       clearTimeout(timer);
@@ -303,7 +309,15 @@ function createServer(cfg = loadConfig()) {
       if (pathname.startsWith('/api/')) {
         const authed = isAuthed(req);
         if (pathname === '/api/status' && req.method === 'GET') {
-          return sendJson(res, 200, { ready: Boolean(cfg.apiKey), locked: !authed, tools: cfg.toolsEnabled });
+          const tiers = Object.values(cfg.tiers).map((t) => ({
+            id: t.id, name: t.name, version: t.version, label: t.label, description: t.description,
+            available: tierAvailable(t, cfg.providers), tools: cfg.toolsEnabled && t.tools,
+            providers: [...new Set(t.chain.filter((c) => cfg.providers[c.provider].apiKey).map((c) => cfg.providers[c.provider].name))],
+          }));
+          return sendJson(res, 200, {
+            ready: tiers.some((t) => t.available), locked: !authed, tools: cfg.toolsEnabled, tiers, defaultTier: cfg.defaultTier,
+            limits: { maxConversations: cfg.maxConversations, maxMessages: cfg.maxMessages },
+          });
         }
         if (req.method !== 'GET' && !originAllowed(req)) return sendJson(res, 403, { error: 'Origem não permitida.' });
 
@@ -349,16 +363,24 @@ function createServer(cfg = loadConfig()) {
   return server;
 }
 
-async function checkModel(cfg) {
-  if (!cfg.apiKey) return log({ level: 'warn', event: 'missing_api_key', message: 'GROQ_API_KEY não definida; o chat responderá 503.' });
-  try {
-    const r = await fetch(`${cfg.baseUrl}/models`, { headers: { Authorization: `Bearer ${cfg.apiKey}` }, signal: AbortSignal.timeout(5000) });
-    if (!r.ok) return log({ level: 'warn', event: 'model_check_failed', status: r.status });
-    const ids = ((await r.json()).data || []).map((m) => m.id);
-    if (!ids.includes(cfg.model)) log({ level: 'warn', event: 'model_not_listed', model: cfg.model });
-    else log({ event: 'model_ok', model: cfg.model });
-  } catch {
-    log({ level: 'warn', event: 'model_check_failed' });
+// Aviso (não bloqueante) se algum modelo configurado não aparece na lista do provedor.
+async function checkModels(cfg) {
+  for (const p of Object.values(cfg.providers)) {
+    if (!p.apiKey) continue;
+    try {
+      const r = await fetch(`${p.baseUrl}/models`, { headers: { Authorization: `Bearer ${p.apiKey}` }, signal: AbortSignal.timeout(6000) });
+      if (!r.ok) { log({ level: 'warn', event: 'model_check_failed', provider: p.id, status: r.status }); continue; }
+      const data = await r.json();
+      const known = new Set();
+      for (const m of data.data || data.models || []) {
+        for (const id of [m.id, m.name, ...(m.aliases || [])]) if (id) known.add(String(id).replace(/^models\//, ''));
+      }
+      for (const t of Object.values(cfg.tiers)) {
+        for (const c of t.chain) if (c.provider === p.id && !known.has(c.model)) log({ level: 'warn', event: 'model_not_listed', provider: p.id, model: c.model, tier: t.id });
+      }
+    } catch {
+      log({ level: 'warn', event: 'model_check_failed', provider: p.id });
+    }
   }
 }
 
@@ -370,9 +392,11 @@ if (require.main === module) {
     if (n) log({ event: 'retention_purge', removed: n });
   };
   server.listen(cfg.port, '0.0.0.0', () => {
-    log({ event: 'listening', port: cfg.port, model: cfg.model, tools: cfg.toolsEnabled, locked: Boolean(cfg.accessCode), dataDir: cfg.dataDir });
+    const configured = Object.values(cfg.providers).filter((p) => p.apiKey).map((p) => p.id);
+    log({ event: 'listening', port: cfg.port, providers: configured, tools: cfg.toolsEnabled, locked: Boolean(cfg.accessCode), dataDir: cfg.dataDir });
+    if (!configured.length) log({ level: 'warn', event: 'no_providers', message: 'Nenhuma chave de API definida (GROQ_API_KEY, GEMINI_API_KEY, MISTRAL_API_KEY ou OPENROUTER_API_KEY); o chat responderá 503.' });
     if (!cfg.accessCode) log({ level: 'warn', event: 'no_access_code', message: 'ACCESS_CODE não definido: qualquer pessoa com o link pode usar o chat e gastar sua cota da Groq.' });
-    checkModel(cfg);
+    checkModels(cfg);
     purge();
     setInterval(purge, 86_400_000).unref();
   });

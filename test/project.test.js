@@ -135,7 +135,12 @@ test('runTool valida argumentos e devolve erros previsíveis', () => {
 const listen = (s) => new Promise((r) => s.listen(0, '127.0.0.1', () => r(s.address().port)));
 const close = (s) => new Promise((r) => { s.closeAllConnections?.(); s.close(r); });
 const startMock = (handler) => new Promise((r) => { const s = http.createServer(handler); s.listen(0, '127.0.0.1', () => r(s)); });
-const cfgFor = (extra = {}) => ({ ...loadConfig({}), dataDir: fs.mkdtempSync(path.join(TMP, 'data-')), apiKey: 'gsk_x', ...extra });
+const ENV_MAP = { baseUrl: 'GROQ_BASE_URL', maxToolSteps: 'MAX_TOOL_STEPS', accessCode: 'ACCESS_CODE' };
+const cfgFor = (extra = {}) => {
+  const env = { GROQ_API_KEY: 'gsk_x', DATA_DIR: fs.mkdtempSync(path.join(TMP, 'data-')) };
+  for (const [k, v] of Object.entries(extra)) env[ENV_MAP[k] || k] = String(v);
+  return loadConfig(env);
+};
 
 function sse(res, deltas) {
   res.writeHead(200, { 'Content-Type': 'text/event-stream' });

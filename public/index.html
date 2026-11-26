@@ -7,7 +7,7 @@
 <title>Siart</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/styles.css">
 </head>
@@ -36,9 +36,10 @@
     <div class="brand"><svg class="logo"><use href="#moon"/></svg><span>Siart</span></div>
     <button id="new-chat" class="btn-new" type="button"><svg class="ico"><use href="#i-plus"/></svg>Nova conversa</button>
     <nav id="chat-list"></nav>
+    <p id="conv-count" class="side-note count"></p>
     <p class="side-note">As conversas ficam salvas somente neste navegador.</p>
   </aside>
-  <div id="scrim" hidden></div>
+  <div id="scrim"></div>
 
   <main>
     <header class="topbar">
@@ -47,8 +48,17 @@
       <button id="open-project" class="btn-project" type="button" aria-expanded="false" aria-controls="project"><svg class="ico"><use href="#i-folder"/></svg><span>Projeto</span></button>
     </header>
     <div id="banner" class="banner" role="alert" hidden></div>
+    <div id="notice" class="banner info" role="status" hidden></div>
     <div id="messages" role="log" aria-live="polite" tabindex="-1"></div>
     <form id="composer" autocomplete="off">
+      <div class="tier-wrap">
+        <div id="tiers" class="tiers" role="radiogroup" aria-label="Nível da IA"></div>
+        <p id="tier-hint" class="tier-hint" aria-live="polite"></p>
+      </div>
+      <div id="limit-note" class="limit-note" role="status" hidden>
+        <span id="limit-text"></span>
+        <button id="limit-new" class="btn-sm" type="button">Nova conversa</button>
+      </div>
       <div class="box">
         <label for="input" class="sr">Mensagem para a Siart</label>
         <textarea id="input" rows="1" maxlength="8000" placeholder="Escreva para a Siart"></textarea>

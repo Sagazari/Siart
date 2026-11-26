@@ -9,12 +9,17 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+      # Chaves: preencha no painel do Render. Basta uma; quanto mais, mais opções de fallback.
       - key: GROQ_API_KEY
-        sync: false          # você preenche no painel do Render
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
       - key: ACCESS_CODE
         sync: false          # recomendado: senha de acesso ao site
-      - key: GROQ_MODEL
-        value: openai/gpt-oss-120b
       - key: TRUST_PROXY
         value: "1"
       - key: DATA_DIR
