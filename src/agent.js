@@ -48,8 +48,18 @@ async function streamCompletion({ provider, body, signal, firstByteMs, onText })
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      res.body?.cancel().catch(() => {});
-      throw Object.assign(new Error('upstream'), { upstreamStatus: res.status, retryAfter: Number(res.headers.get('retry-after')) || 0 });
+      let upstreamMessage = '';
+      try {
+        const payload = await res.json();
+        const detail = payload?.error?.message || payload?.error || payload?.message || payload?.detail;
+        if (typeof detail === 'string') upstreamMessage = detail.slice(0, 500);
+        else if (detail && typeof detail.message === 'string') upstreamMessage = detail.message.slice(0, 500);
+      } catch { /* alguns gateways não retornam JSON */ }
+      throw Object.assign(new Error('upstream'), {
+        upstreamStatus: res.status,
+        upstreamMessage,
+        retryAfter: Number(res.headers.get('retry-after')) || 0,
+      });
     }
     const decoder = new TextDecoder();
     let buf = '';
@@ -146,7 +156,7 @@ async function completeWithFallback({ cfg, tier, candidates, buildBody, call, st
       const k = classify(err);
       health.mark(k.modelLevel ? `${c.provider}:${c.model}` : c.provider, k.cool);
       tried.push({ provider: c.provider, reason: k.reason });
-      log({ level: 'warn', event: 'provider_failed', taskId, provider: c.provider, model: c.model, reason: k.reason, status: err.upstreamStatus });
+      log({ level: 'warn', event: 'provider_failed', taskId, provider: c.provider, model: c.model, reason: k.reason, status: err.upstreamStatus, upstreamMessage: err.upstreamMessage || undefined });
       const next = ordered[i + 1];
       if (!next) throw Object.assign(new Error('all providers failed'), { allFailed: true, tried });
       send('model.fallback', { from: c.provider, fromName: provider.name, to: next.provider, toName: cfg.providers[next.provider].name, reason: k.reason });

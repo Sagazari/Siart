@@ -63,7 +63,7 @@ test('níveis têm nomes, versões e cadeias padrão; TIER_* sobrescreve; dispon
   assert.deepEqual(Object.values(tiers).map((t) => t.label), ['Absoluty 1.1', 'Moyenne 1', 'Basse 0.1']);
   assert.equal(tiers.basse.tools, false);
   assert.equal(tiers.absoluty.tools, true);
-  assert.ok(Object.values(tiers).every((t) => new Set(t.chain.map((c) => c.provider)).size === 4));
+  assert.ok(Object.values(tiers).every((t) => new Set(t.chain.map((c) => c.provider)).size === 5));
   const custom = buildTiers({ TIER_BASSE: 'mistral:mistral-small-latest', TIER_BASSE_TOOLS: '1', TIER_MOYENNE_FIRST_BYTE_MS: '500' });
   assert.deepEqual(custom.basse.chain, [{ provider: 'mistral', model: 'mistral-small-latest' }]);
   assert.equal(custom.basse.tools, true);

@@ -11,7 +11,7 @@
     'Ajude a planejar uma ideia do zero',
   ];
 
-  const REASON = { rate_limit: 'atingiu o limite de uso', unavailable: 'está indisponível', auth: 'não aceitou a chave', timeout: 'demorou demais', model_unavailable: 'não tem esse modelo', billing: 'está sem créditos', rejected: 'rejeitou a requisição', empty: 'não respondeu' };
+  const REASON = { rate_limit: 'atingiu o limite de uso', unavailable: 'está indisponível', auth: 'não aceitou a chave', timeout: 'demorou demais', model_unavailable: 'não tem esse modelo', billing: 'está sem créditos ou faturamento ativo', rejected: 'rejeitou a requisição (verifique modelo e parâmetros)', empty: 'não respondeu' };
   let tiers = [];
   let tierId = null;
   try { tierId = localStorage.getItem('siart.tier'); } catch { /* sem armazenamento */ }
@@ -156,7 +156,7 @@
     bubble.className = 'bubble';
     if (m.role === 'user') bubble.textContent = m.content;
     else if (live && !m.content && !(m.fallbacks && m.fallbacks.length)) {
-      bubble.innerHTML = '<span class="dots" role="img" aria-label="A Siart está respondendo"><i></i><i></i><i></i></span>';
+      bubble.textContent = ''; // sem animação duplicada de três pontos; o status da Lua já indica atividade
     } else bubble.innerHTML = md(m.content);
     wrap.append(bubble);
     if (m.via && m.role === 'assistant') { const v = document.createElement('div'); v.className = 'meta'; v.textContent = m.via.tier + ' · via ' + m.via.provider; wrap.append(v); }

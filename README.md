@@ -94,3 +94,11 @@ A variável `GROQ_MODEL` da versão anterior não existe mais: use `TIER_*`.
 - **Rate limit em memória:** vale para uma instância só.
 - Não foi testado com Groq, Gemini, Mistral ou OpenRouter reais nem em navegador real neste ambiente; os testes usam provedores simulados. Gemini e OpenRouter podem diferir em detalhes do streaming de tool calls; se algum falhar, o log mostra `provider_failed` e a Siart passa ao próximo.
 - Gemini 2.5 Pro e outros modelos podem exigir faturamento ativo na conta; sem ele, o provedor retorna 429 ou 403 e a Siart troca.
+
+
+## Diagnóstico de provedores
+
+- OpenRouter: a cadeia padrão usa `nvidia/nemotron-3-ultra-550b-a55b:free` (ID completo do modelo gratuito). Se você definiu `TIER_ABSOLUTY`, `TIER_MOYENNE` ou `TIER_BASSE` no Render, essa variável substitui a cadeia padrão; atualize/remova IDs antigos nela.
+- Mistral: use `MISTRAL_API_KEY` válida. A conta precisa ter acesso ativo à API e faturamento habilitado no Mistral Studio; uma chave criada sem acesso/billing pode retornar 401/402.
+- OpenRouter: use `OPENROUTER_API_KEY` válida. Modelos gratuitos têm limites próprios de requisições e podem ficar temporariamente indisponíveis.
+- Para conferir o motivo exato de uma falha, abra **Render → serviço Siart → Logs** e procure `provider_failed`; o log inclui provedor, modelo, status HTTP e mensagem retornada pelo gateway, sem registrar a chave secreta.

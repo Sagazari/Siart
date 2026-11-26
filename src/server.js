@@ -189,7 +189,7 @@ function createServer(cfg = loadConfig()) {
         if (timedOut) send('task.failed', { code: 'timeout', message: 'A resposta demorou demais e foi interrompida.' });
         else if (err.allFailed) send('task.failed', {
           code: 'all_providers_failed', tried: err.tried || [],
-          message: 'Nenhum provedor de IA conseguiu responder agora. Tente de novo em instantes ou escolha outro nível.',
+          message: 'Nenhum provedor de IA conseguiu responder agora. Consulte os motivos de cada tentativa no histórico de execução do servidor.',
         });
         else send('task.failed', { code: 'upstream_error', message: 'A conexão com o provedor de IA foi interrompida. Tente novamente.' });
       }
