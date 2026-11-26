@@ -3,12 +3,12 @@
   const $ = (id) => document.getElementById(id);
   const el = { sidebar: $('sidebar'), scrim: $('scrim'), list: $('chat-list'), title: $('title'), banner: $('banner'),
     messages: $('messages'), form: $('composer'), input: $('input'), send: $('send'), menu: $('menu'), newChat: $('new-chat') };
-  const ui = { tiers: $('tiers'), tierHint: $('tier-hint'), notice: $('notice'), count: $('conv-count'), limitNote: $('limit-note'), limitText: $('limit-text'), limitNew: $('limit-new') };
+  const ui = { tiers: $('tiers'), tierHint: $('tier-hint'), modelToggle: $('model-toggle'), modelPanel: $('model-panel'), notice: $('notice'), count: $('conv-count'), limitNote: $('limit-note'), limitText: $('limit-text'), limitNew: $('limit-new') };
   const STORE = 'siart.v1';
   const SUGGESTIONS = [
-    'Explique este erro e como corrigi-lo',
-    'Revise um trecho de código meu',
-    'Ajude a planejar a arquitetura de um app',
+    'Ajude-me a entender um assunto novo',
+    'Pesquise e organize estas informações',
+    'Ajude a planejar uma ideia do zero',
   ];
 
   const REASON = { rate_limit: 'atingiu o limite de uso', unavailable: 'está indisponível', auth: 'não aceitou a chave', timeout: 'demorou demais', model_unavailable: 'não tem esse modelo', billing: 'está sem créditos', rejected: 'rejeitou a requisição', empty: 'não respondeu' };
@@ -105,15 +105,7 @@
     create_project_directory: 'Organizando diretórios', rename_project_file: 'Reorganizando arquivos',
     generate_pdf: 'Preparando documento',
   };
-  const WORKFLOWS = [
-    { test: /site|website|landing|página|interface|frontend|html|css/i, stages: ['Interpretando a experiência desejada...', 'Definindo a direção visual...', 'Estruturando a interface...', 'Construindo componentes e estilos...', 'Preparando interações e responsividade...', 'Refinando os detalhes finais...'] },
-    { test: /backend|api|servidor|banco|database|autenticação|sistema/i, stages: ['Mapeando os requisitos do sistema...', 'Desenhando a arquitetura técnica...', 'Definindo contratos e integrações...', 'Implementando a lógica principal...', 'Validando fluxos e tratamento de erros...', 'Consolidando a estrutura...'] },
-    { test: /bug|erro|corrigir|depurar|debug|problema/i, stages: ['Analisando o cenário...', 'Rastreando a origem do problema...', 'Isolando a causa provável...', 'Preparando a correção...', 'Revisando possíveis efeitos colaterais...'] },
-    { test: /pdf|documento|relatório/i, stages: ['Organizando o conteúdo...', 'Definindo a estrutura do documento...', 'Preparando a composição...', 'Gerando o material...', 'Conferindo a entrega...'] },
-    { test: /código|program|script|função|componente|projeto|app|aplicativo/i, stages: ['Interpretando os requisitos...', 'Planejando a implementação...', 'Estruturando os módulos...', 'Desenvolvendo as funções...', 'Integrando os componentes...', 'Revisando a solução...'] },
-    { test: /.*/, stages: ['Analisando sua solicitação...', 'Organizando os pontos principais...', 'Preparando uma resposta consistente...'] }
-  ];
-  function workflowFor(prompt) { return (WORKFLOWS.find((w) => w.test.test(prompt || '')) || WORKFLOWS[WORKFLOWS.length - 1]).stages; }
+  function initialWorkStage() { return 'Analisando sua solicitação...'; }
   const STATUS_TEXT = { running: 'em andamento', done: 'concluído', failed: 'falhou', cancelled: 'cancelado' };
 
   // ---------- Renderização ----------
@@ -152,39 +144,18 @@
       markNew(d, f);
       wrap.append(d);
     });
-    if (m.activity && m.activity.length) {
-      const ul = document.createElement('ul');
-      ul.className = 'activity';
-      ul.setAttribute('aria-label', 'Ações da Siart no projeto');
-      m.activity.forEach((a) => {
-        const li = document.createElement('li');
-        markNew(li, a);
-        const label = document.createElement('span');
-        label.textContent = a.label + (a.path ? ' ' : '');
-        li.append(label);
-        if (a.path) { const c = document.createElement('code'); c.textContent = a.path; li.append(c); }
-        const st = document.createElement('span');
-        st.className = 'st ' + a.status;
-        st.textContent = STATUS_TEXT[a.status] || a.status;
-        li.append(st);
-        if (a.note) { const n = document.createElement('span'); n.className = 'act-note'; n.textContent = a.note; li.append(n); }
-        ul.append(li);
-      });
-      wrap.append(ul);
-    }
     if (live && m.working) {
       const status = document.createElement('div'); status.className = 'work-status';
       const head = document.createElement('div'); head.className = 'work-head';
       head.innerHTML = '<svg class="logo moon-spin" viewBox="0 0 32 32"><use href="#moon"/></svg>';
-      const label = document.createElement('span'); label.className = 'work-current'; label.textContent = m.stage || 'Analisando sua solicitação...';
+      const label = document.createElement('span'); label.className = 'work-current rise-in'; label.textContent = m.stage || 'Analisando sua solicitação...';
       head.append(label); status.append(head);
-      if (m.substage) { const sub = document.createElement('div'); sub.className = 'work-substage'; sub.textContent = m.substage; status.append(sub); }
       wrap.append(status);
     }
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     if (m.role === 'user') bubble.textContent = m.content;
-    else if (live && !m.content && !(m.activity && m.activity.length) && !(m.fallbacks && m.fallbacks.length)) {
+    else if (live && !m.content && !(m.fallbacks && m.fallbacks.length)) {
       bubble.innerHTML = '<span class="dots" role="img" aria-label="A Siart está respondendo"><i></i><i></i><i></i></span>';
     } else bubble.innerHTML = md(m.content);
     wrap.append(bubble);
@@ -200,8 +171,8 @@
     const col = document.createElement('div');
     col.className = 'col';
     if (!chat || chat.messages.length === 0) {
-      col.innerHTML = '<div class="empty"><div class="logo-wrap"><svg class="logo"><use href="#moon"/></svg></div><h2>O que vamos construir?</h2>' +
-        '<p>Pergunte sobre código, depuração, arquitetura ou design de interface.</p><div class="chips"></div></div>';
+      col.innerHTML = '<div class="empty"><div class="logo-wrap"><svg class="logo"><use href="#moon"/></svg></div><h2>Como posso ajudar?</h2>' +
+        '<p>Converse, aprenda, pesquise, planeje ou crie. Vamos começar pela sua ideia.</p><div class="chips"></div></div>';
       const chips = col.querySelector('.chips');
       SUGGESTIONS.forEach((t) => {
         const b = document.createElement('button');
@@ -267,6 +238,8 @@
     tierId = id;
     try { localStorage.setItem('siart.tier', id); } catch { /* ok */ }
     showTierHint();
+    if (ui.modelToggle) { const selected = tiers.find((t) => t.id === tierId); ui.modelToggle.textContent = selected ? selected.name + '  ·  ▾' : 'Modelo  ·  ▾'; }
+    if (ui.modelPanel) { ui.modelPanel.hidden = true; ui.modelToggle?.setAttribute('aria-expanded', 'false'); }
   }
   function renderTiers(defaultId) {
     const avail = tiers.filter((t) => t.available);
@@ -285,6 +258,7 @@
       ui.tiers.append(label);
     });
     showTierHint();
+    if (ui.modelToggle) { const selected = tiers.find((t) => t.id === tierId); ui.modelToggle.textContent = selected ? selected.name + '  ·  ▾' : 'Modelo  ·  ▾'; }
   }
 
   function renderAll(animateFrom) {
@@ -341,8 +315,7 @@
     }
     chat.messages.push({ role: 'user', content: text });
     if (chat.messages.length === 1) chat.title = text.replace(/\s+/g, ' ').slice(0, 48);
-    const stages = workflowFor(text); let stageIndex = 0;
-    const reply = { role: 'assistant', content: '', working: true, stage: stages[0] };
+    const reply = { role: 'assistant', content: '', working: true, stage: initialWorkStage() };
     chat.messages.push(reply);
     chat.updatedAt = Date.now();
     save();
@@ -352,12 +325,6 @@
     // Só mensagens com conteúdo vão ao servidor; o último item (resposta em branco) fica de fora.
     const payload = chat.messages.slice(0, -1).filter((m) => m.content).map(({ role, content }) => ({ role, content }));
     controller = new AbortController();
-    const stageTimer = setInterval(() => {
-      if (!streaming || !reply.working) return;
-      stageIndex = (stageIndex + 1) % stages.length; reply.stage = stages[stageIndex];
-      const status = el.messages.querySelector('.msg:last-child .work-current');
-      if (status) { status.classList.remove('rise-in'); void status.offsetWidth; status.textContent = reply.stage; status.classList.add('rise-in'); }
-    }, 2300);
     try {
       const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tierId ? { messages: payload, tier: tierId } : { messages: payload }), signal: controller.signal });
       if (!res.ok) {
@@ -382,12 +349,11 @@
           (reply.fallbacks ||= []).push({ text: data.fromName + ' ' + (REASON[data.reason] || 'falhou') + '. Usando ' + data.toName + '.' });
           refreshLast(reply);
         } else if (event === 'tool.started') {
-          reply.substage = TOOL_LABEL[data.tool] || 'Executando etapa técnica';
-          (reply.activity ||= []).push({ id: data.callId, label: TOOL_LABEL[data.tool] || data.tool, path: data.path, status: 'running' });
+          reply.stage = TOOL_LABEL[data.tool] || 'Executando uma etapa da tarefa...';
           refreshLast(reply);
         } else if (event === 'tool.completed' || event === 'tool.failed') {
-          const a = (reply.activity || []).find((x) => x.id === data.callId);
-          if (a) { a.status = event === 'tool.completed' ? 'done' : 'failed'; if (data.message) a.note = data.message; }
+          if (event === 'tool.failed') reply.stage = 'Reavaliando a etapa e preparando uma alternativa...';
+          else reply.stage = 'Integrando os resultados...';
           refreshLast(reply);
           if (event === 'tool.completed' && data.mutated && window.SiartProject) window.SiartProject.onMutation(data.path);
         } else if (event === 'task.failed') {
@@ -398,10 +364,9 @@
       if (e.name === 'AbortError') reply.stopped = true;
       else reply.error = e.message || 'Falha de conexão.';
     } finally {
-      clearInterval(stageTimer); reply.working = false;
+      reply.working = false;
       controller = null;
       setStreaming(false);
-      (reply.activity || []).forEach((a) => { if (a.status === 'running') a.status = 'cancelled'; });
       if (window.SiartProject) window.SiartProject.onChatEnd();
       if (!reply.content && !reply.error && !reply.stopped) reply.error = 'A Siart não retornou conteúdo. Tente novamente.';
       chat.updatedAt = Date.now();
@@ -409,6 +374,21 @@
       renderAll();
       el.input.focus();
     }
+  }
+
+  // Seletor discreto de modelo: abre apenas quando solicitado.
+  if (ui.modelToggle && ui.modelPanel) {
+    ui.modelToggle.addEventListener('click', () => {
+      const open = ui.modelPanel.hidden;
+      ui.modelPanel.hidden = !open;
+      ui.modelToggle.setAttribute('aria-expanded', String(open));
+    });
+    document.addEventListener('click', (event) => {
+      if (!ui.modelPanel.hidden && !ui.modelPanel.contains(event.target) && !ui.modelToggle.contains(event.target)) {
+        ui.modelPanel.hidden = true;
+        ui.modelToggle.setAttribute('aria-expanded', 'false');
+      }
+    });
   }
 
   // ---------- Interações ----------

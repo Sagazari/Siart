@@ -51,9 +51,12 @@
     <div id="notice" class="banner info" role="status" hidden></div>
     <div id="messages" role="log" aria-live="polite" tabindex="-1"></div>
     <form id="composer" autocomplete="off">
-      <div class="tier-wrap">
-        <div id="tiers" class="tiers" role="radiogroup" aria-label="Nível da IA"></div>
-        <p id="tier-hint" class="tier-hint" aria-live="polite"></p>
+      <div class="model-picker">
+        <button id="model-toggle" class="model-toggle" type="button" aria-expanded="false" aria-controls="model-panel">Modelo · ▾</button>
+        <div id="model-panel" class="model-panel" hidden>
+          <div id="tiers" class="tiers" role="radiogroup" aria-label="Modelo da Siart"></div>
+          <p id="tier-hint" class="tier-hint" aria-live="polite"></p>
+        </div>
       </div>
       <div id="limit-note" class="limit-note" role="status" hidden>
         <span id="limit-text"></span>
