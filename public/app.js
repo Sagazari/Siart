@@ -211,10 +211,14 @@
     (m.artifacts || []).forEach((artifact) => {
       const card = document.createElement('section'); card.className = 'artifact-card';
       const icon = document.createElement('span'); icon.className = 'artifact-icon';
-      icon.textContent = artifact.kind === 'pdf' ? 'PDF' : artifact.kind === 'html' ? 'HTML' : 'FILE';
+      const filename = artifact.path.split('/').pop();
+      const ext = (filename.split('.').pop() || 'file').toLowerCase();
+      const kind = ['html','htm'].includes(ext) ? 'html' : ['css'].includes(ext) ? 'css' : ['js','mjs','ts','tsx','jsx'].includes(ext) ? 'js' : ext === 'pdf' ? 'pdf' : ['png','jpg','jpeg','webp','svg','gif'].includes(ext) ? 'image' : ext === 'json' ? 'json' : 'file';
+      icon.dataset.kind = kind;
+      icon.textContent = ({html:'HTML',css:'CSS',js:'JS',pdf:'PDF',image:'IMG',json:'JSON',file:ext.slice(0,5).toUpperCase()})[kind];
       const info = document.createElement('div'); info.className = 'artifact-info';
-      const name = document.createElement('strong'); name.textContent = artifact.path.split('/').pop();
-      const path = document.createElement('span'); path.textContent = artifact.path;
+      const name = document.createElement('strong'); name.textContent = filename;
+      const path = document.createElement('span'); path.textContent = artifact.path === filename ? 'Arquivo do projeto' : artifact.path;
       info.append(name, path);
       const actions = document.createElement('div'); actions.className = 'artifact-actions';
       const download = document.createElement('a'); download.className = 'artifact-btn primary';

@@ -569,3 +569,40 @@ body { background: #101010; letter-spacing: -.012em; }
 .message-action { border:1px solid transparent; border-radius:7px; padding:5px 8px; background:transparent; color:#858b87; font-size:11px; }
 .message-action:hover { color:#d9fff0; border-color:#285442; background:#14231c; }
 @media(max-width:859px) { .preferences-box { padding:20px; } }
+
+
+/* Siart 1.4.1 — motion system, cards cromáticos e acabamento esmeralda */
+:root { --accent:#10B981; --accent-2:#34D399; --ok:#10B981; }
+/* Shimmer real: faixa de luz percorre o texto inteiro, com contraste e ciclo contínuo. */
+.work-current:not(.is-done), .work-current.rise-in:not(.is-done), .activity-label.is-running {
+  display:inline-block !important; color:transparent !important; -webkit-text-fill-color:transparent !important;
+  background-image:linear-gradient(105deg,#777 0%,#a7a7a7 22%,#f8fffC 42%,#10B981 50%,#eafff6 58%,#999 78%,#777 100%) !important;
+  background-size:300% 100% !important; background-position:200% 50%;
+  background-clip:text !important; -webkit-background-clip:text !important;
+  animation:siart-live-shimmer 2.1s cubic-bezier(.45,0,.55,1) infinite !important;
+  will-change:background-position; font-weight:600;
+}
+@keyframes siart-live-shimmer { 0% {background-position:200% 50%} 100% {background-position:-100% 50%} }
+.work-head .logo { filter:drop-shadow(0 0 7px rgba(16,185,129,.22)) !important; }
+.activity { margin-left:29px !important; gap:8px !important; }
+.activity li { grid-template-columns:18px minmax(0,1fr) !important; align-items:center !important; }
+.activity .st { min-width:18px !important; width:18px !important; height:18px !important; }
+.activity .st.done { color:#10B981 !important; text-shadow:0 0 9px rgba(16,185,129,.25); }
+.activity .st.running { color:#d1fae5 !important; animation:siart-dot-pulse 1.25s ease-in-out infinite !important; }
+@keyframes siart-dot-pulse {0%,100%{opacity:.45;transform:scale(.88)}50%{opacity:1;transform:scale(1.12)}}
+.activity .st.failed {color:#fb7185 !important}
+/* Cards com hierarquia, ícone por tipo de arquivo e ações com alvo confortável. */
+.artifact-card { display:grid !important; grid-template-columns:52px minmax(0,1fr); gap:12px 14px !important; align-items:center; padding:16px !important; margin:12px 0 18px 29px !important; background:linear-gradient(145deg,#1b211f,#171918) !important; border:1px solid rgba(16,185,129,.22) !important; border-radius:16px !important; box-shadow:0 10px 30px rgba(0,0,0,.18),inset 0 1px rgba(255,255,255,.025) !important; }
+.artifact-icon { display:grid !important; place-items:center; width:50px; height:54px; border-radius:13px !important; color:#fff !important; background:linear-gradient(145deg,#10B981,#047857) !important; font-size:11px; font-weight:800; letter-spacing:.02em; box-shadow:0 5px 16px rgba(16,185,129,.18); }
+.artifact-icon[data-kind="html"],.artifact-icon[data-kind="css"],.artifact-icon[data-kind="js"] {background:linear-gradient(145deg,#f59e0b,#ea580c) !important}
+.artifact-icon[data-kind="pdf"] {background:linear-gradient(145deg,#fb7185,#be123c) !important}
+.artifact-icon[data-kind="image"] {background:linear-gradient(145deg,#a78bfa,#6d28d9) !important}
+.artifact-icon[data-kind="json"] {background:linear-gradient(145deg,#60a5fa,#2563eb) !important}
+.artifact-info { min-width:0; display:flex; flex-direction:column; gap:3px; }
+.artifact-info strong {color:#f4f7f5 !important;font-size:14px;font-weight:650;overflow-wrap:anywhere}
+.artifact-info span {color:#8e9b95 !important;font-size:11px;overflow-wrap:anywhere}
+.artifact-actions {grid-column:2;display:flex;flex-wrap:wrap;gap:8px !important;margin-top:-2px}
+.artifact-btn {display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 13px;border-radius:10px !important;border:1px solid #3b4a43 !important;background:#202a25 !important;color:#d9e8e0 !important;font-size:12px;font-weight:600;text-decoration:none;transition:transform .16s ease,border-color .16s ease,background .16s ease}
+.artifact-btn.primary {background:#10B981 !important;border-color:#10B981 !important;color:#062318 !important}
+.artifact-btn:hover {transform:translateY(-1px);border-color:#34D399 !important}
+@media(max-width:560px){.artifact-card{margin-left:0 !important;grid-template-columns:46px minmax(0,1fr);padding:13px !important}.artifact-icon{width:44px;height:48px}.artifact-actions{grid-column:1/-1;margin-top:3px}.artifact-btn{flex:1}}

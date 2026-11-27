@@ -1,8 +1,8 @@
 {
   "name": "siart",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
-  "description": "Siart AI: chat com streaming, agente de projeto, estudo e interface escura com acentos esmeralda.",
+  "description": "Siart AI: chat com streaming, agente de projeto, revisão de sites e identidade esmeralda refinada.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
