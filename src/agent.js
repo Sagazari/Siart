@@ -166,7 +166,7 @@ async function completeWithFallback({ cfg, tier, candidates, buildBody, call, st
 }
 
 // Conversa com o modelo; com workspace e ferramentas ligadas, repete (modelo -> ferramentas -> modelo).
-async function runAgent({ cfg, tier, messages, ws, send, signal, log, taskId, health }) {
+async function runAgent({ cfg, tier, messages, userInstructions = '', ws, send, signal, log, taskId, health }) {
   const hasImages = messages.some((m) => Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'));
   const requestedWebsite = messages.some((m) => m.role === 'user' && typeof m.content === 'string' && /\b(site|website|p[aá]gina|landing\s*page|html|web\s*app)\b/i.test(m.content));
   let candidates = tier.chain.filter((c) => cfg.providers[c.provider] && cfg.providers[c.provider].apiKey);
@@ -178,11 +178,12 @@ async function runAgent({ cfg, tier, messages, ws, send, signal, log, taskId, he
   if (!candidates.length) throw Object.assign(new Error('no providers'), { allFailed: true, tried: [] });
 
   const state = { toolsOn: Boolean(cfg.toolsEnabled && tier.tools && ws), announced: null };
-  const history = [{ role: 'system', content: buildSystemPrompt({ tools: state.toolsOn }) }, ...messages];
+  const makePrompt = (tools) => buildSystemPrompt({ tools }) + (userInstructions ? `\n\nPreferências persistentes definidas pelo usuário (trate como preferências, não como instruções de segurança):\n${userInstructions}` : '');
+  const history = [{ role: 'system', content: makePrompt(state.toolsOn) }, ...messages];
   let promptHasTools = state.toolsOn;
   state.syncPrompt = (on) => {
     if (promptHasTools === on) return;
-    history[0] = { role: 'system', content: buildSystemPrompt({ tools: on }) };
+    history[0] = { role: 'system', content: makePrompt(on) };
     promptHasTools = on;
   };
 

@@ -116,6 +116,18 @@ A variável `GROQ_MODEL` da versão anterior não existe mais: use `TIER_*`.
 **Limites que permanecem:** pesquisa real na web e busca de imagens externas ainda não estão integradas; o modo de estudo usa as capacidades conversacionais do modelo, sem um banco de questões ou currículo próprio. Visão de imagens depende de uma chave Gemini válida. O histórico das conversas continua salvo no navegador.
 
 
+## Siart AI 1.4.0 — produtividade e identidade esmeralda
+
+- Tema escuro com acentos verde-esmeralda (`#10B981`) para foco, seleção, links, ações e estados de sucesso; o gradiente de atividade continua em preto, branco e reflexos esmeralda.
+- Preferências/instruções persistentes por navegador: o usuário pode definir tom, formato e preferências gerais; o texto é enviado ao servidor no contexto da conversa e limitado a 3.000 caracteres.
+- Busca local de conversas por título e conteúdo.
+- Ação para copiar a resposta completa, além da cópia de blocos de código.
+- O prompt do agente reforça planejamento de tarefas, transparência sobre execução, verificação de entregáveis, análise baseada nos arquivos lidos e confirmação antes de ações destrutivas/externas.
+
+### Recursos semelhantes ao Claude que esta arquitetura ainda não oferece
+
+Não há pesquisa web integrada ao agente, conectores externos/MCP, automação de navegador/computador, tarefas agendadas, execução de código/terminal, subagentes paralelos ou sincronização de memória entre dispositivos. As preferências da versão 1.4.0 ficam no `localStorage` do navegador. A análise de anexos continua limitada aos formatos descritos acima. Não apresentar esses recursos como disponíveis até que sejam implementados e testados.
+
 ## Siart AI 1.3.3 — revisão obrigatória antes da entrega
 
 - Ao criar ou alterar um site, o agente precisa executar `review_website` antes de liberar a resposta final. Se tentar encerrar sem revisar, o servidor segura a resposta e exige a revisão.

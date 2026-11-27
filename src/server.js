@@ -179,7 +179,7 @@ function createServer(cfg = loadConfig()) {
 
     send('task.started', { tier: tier.id });
     try {
-      await runAgent({ cfg, tier, messages: v.messages, ws: cfg.toolsEnabled && tier.tools ? getWs(cid) : null, send, signal: ac.signal, log, taskId, health });
+      await runAgent({ cfg, tier, messages: v.messages, userInstructions: typeof body.instructions === 'string' ? body.instructions.slice(0, 3000) : '', ws: cfg.toolsEnabled && tier.tools ? getWs(cid) : null, send, signal: ac.signal, log, taskId, health });
       send('message.completed');
       send('task.completed');
     } catch (err) {

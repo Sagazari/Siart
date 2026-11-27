@@ -468,7 +468,7 @@ button, a, input, textarea, select, .chip, .tier, .btn-project, .btn-new,
 :root {
   --bg: #101010; --bg-2: #171717; --surface: #1d1d1d;
   --text: #f2f2f2; --text-2: #999; --border: #303030;
-  --accent: #c7c7c7; --side: 264px;
+  --accent: #10B981; --accent-2: #34D399; --ok: #10B981; --side: 264px;
 }
 body { background: #101010; letter-spacing: -.012em; }
 #sidebar { background: #151515; border-right-color: #292929; padding: 20px 14px calc(14px + env(safe-area-inset-bottom)); gap: 14px; }
@@ -540,3 +540,32 @@ body { background: #101010; letter-spacing: -.012em; }
 @media (prefers-reduced-motion: reduce) {
   .work-current, .work-current.rise-in, .activity-label.is-running { animation: siart-monochrome-flow 3.5s linear infinite !important; }
 }
+
+
+/* Siart 1.4 — identidade esmeralda e recursos de produtividade */
+:root { --accent:#10B981 !important; --accent-2:#34D399 !important; --ok:#10B981 !important; --focus:#34D399 !important; }
+:focus-visible { outline-color:#34D399 !important; }
+.btn-new:hover,.btn-project:hover,.chip:hover,.artifact-btn:hover,.btn-sm:hover { border-color:rgba(16,185,129,.65) !important; }
+.send:not(:disabled) { background:#10B981 !important; color:#07150f !important; border-color:#10B981 !important; }
+.send:not(:disabled):hover { background:#34D399 !important; }
+.tier:has(input:checked) { border-color:rgba(16,185,129,.65) !important; }
+.msg.assistant .bubble a { color:#34D399 !important; }
+.activity .st.done,.work-done-icon { color:#10B981 !important; }
+.activity-label.is-running { background-image:linear-gradient(100deg,#777 0%,#d9fff0 38%,#10B981 52%,#d9fff0 68%,#777 100%) !important; }
+.work-current,.work-current.rise-in { background-image:linear-gradient(100deg,#777 0%,#d9fff0 36%,#10B981 52%,#d9fff0 68%,#777 100%) !important; }
+.chat-search { width:100%; min-height:40px; padding:0 11px; color:var(--text); background:#1b1b1b; border:1px solid var(--border); border-radius:9px; font:13px var(--font); outline:none; }
+.chat-search:focus { border-color:var(--accent); }
+.preferences { position:fixed; inset:0; z-index:70; display:grid; place-items:center; padding:18px; background:rgba(0,0,0,.68); }
+.preferences[hidden] { display:none; }
+.preferences-box { position:relative; width:min(520px,100%); padding:24px; border:1px solid #343b38; border-radius:18px; background:#171a18; display:flex; flex-direction:column; gap:12px; }
+.preferences-box h2 { margin:0; font-size:20px; }
+.preferences-box p { margin:0; color:var(--text-2); font-size:13px; }
+.preferences-box label { font-size:13px; color:#ddd; }
+.preferences-box textarea { width:100%; resize:vertical; min-height:130px; padding:12px; border:1px solid var(--border); border-radius:10px; background:#101210; color:var(--text); font:14px/1.55 var(--font); }
+.preferences-close { position:absolute; right:10px; top:10px; font-size:22px; }
+.preferences-actions { display:flex; justify-content:flex-end; gap:8px; }
+.btn-sm.primary { background:#10B981; color:#07150f; border-color:#10B981; font-weight:650; }
+.message-actions { display:flex; gap:6px; margin-top:8px; }
+.message-action { border:1px solid transparent; border-radius:7px; padding:5px 8px; background:transparent; color:#858b87; font-size:11px; }
+.message-action:hover { color:#d9fff0; border-color:#285442; background:#14231c; }
+@media(max-width:859px) { .preferences-box { padding:20px; } }

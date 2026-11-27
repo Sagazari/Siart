@@ -3,9 +3,13 @@
   const $ = (id) => document.getElementById(id);
   const el = { sidebar: $('sidebar'), scrim: $('scrim'), list: $('chat-list'), title: $('title'), banner: $('banner'),
     messages: $('messages'), form: $('composer'), input: $('input'), send: $('send'), voice: $('voice'), menu: $('menu'), newChat: $('new-chat'),
-    attach: $('attach'), attachmentInput: $('attachment-input'), attachmentList: $('attachment-list') };
+    attach: $('attach'), attachmentInput: $('attachment-input'), attachmentList: $('attachment-list'), chatSearch: $('chat-search') };
   const ui = { tiers: $('tiers'), tierHint: $('tier-hint'), modelToggle: $('model-toggle'), modelPanel: $('model-panel'), notice: $('notice'), count: $('conv-count'), limitNote: $('limit-note'), limitText: $('limit-text'), limitNew: $('limit-new') };
   const STORE = 'siart.v1';
+  const INSTRUCTIONS_KEY = 'siart.custom-instructions.v1';
+  const preferences = { root: $('preferences'), form: $('preferences-form'), input: $('custom-instructions'), status: $('preferences-status') };
+  let customInstructions = '';
+  try { customInstructions = localStorage.getItem(INSTRUCTIONS_KEY) || ''; } catch { /* storage unavailable */ }
   const SUGGESTIONS = [
     'Explique um assunto passo a passo',
     'Crie um resumo e um quiz para estudar',
@@ -139,7 +143,7 @@
   // ---------- Renderização ----------
   function renderList() {
     el.list.textContent = '';
-    [...state.chats].sort((a, b) => b.updatedAt - a.updatedAt).forEach((c) => {
+    [...state.chats].sort((a, b) => b.updatedAt - a.updatedAt).filter((c) => !el.chatSearch?.value || c.title.toLowerCase().includes(el.chatSearch.value.toLowerCase()) || c.messages.some(m => (m.content || '').toLowerCase().includes(el.chatSearch.value.toLowerCase()))).forEach((c) => {
       const row = document.createElement('div');
       row.className = 'chat-item' + (c.id === state.activeId ? ' active' : '') + (seenChats.has(c.id) ? '' : ' enter');
       seenChats.add(c.id);
@@ -242,6 +246,7 @@
     } else bubble.innerHTML = md(m.content);
     wrap.append(bubble);
     if (m.via && m.role === 'assistant') { const v = document.createElement('div'); v.className = 'meta'; v.textContent = m.via.tier + ' · via ' + m.via.provider; wrap.append(v); }
+    if (m.role === 'assistant' && m.content && !live) { const actions = document.createElement('div'); actions.className = 'message-actions'; const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'message-action copy-answer'; copy.textContent = 'Copiar resposta'; copy.dataset.copy = 'answer'; actions.append(copy); wrap.append(actions); }
     if (m.stopped) { const s = document.createElement('div'); s.className = 'stopped'; s.textContent = 'Resposta interrompida.'; wrap.append(s); }
     if (m.error) { const e = document.createElement('div'); e.className = 'err'; e.textContent = m.error; wrap.append(e); }
     return wrap;
@@ -482,7 +487,7 @@
     });
     controller = new AbortController();
     try {
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tierId ? { messages: payload, tier: tierId } : { messages: payload }), signal: controller.signal });
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: payload, ...(tierId ? { tier: tierId } : {}), ...(customInstructions ? { instructions: customInstructions } : {}) }), signal: controller.signal });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         if (j.code === 'auth_required') window.dispatchEvent(new Event('siart:auth'));
@@ -692,6 +697,14 @@
     el.input.style.height = Math.min(el.input.scrollHeight, 200) + 'px';
   }
   el.input.addEventListener('input', autosize);
+  if (el.chatSearch) el.chatSearch.addEventListener('input', renderList);
+  const openPreferences = $('open-preferences');
+  const closePreferences = () => { preferences.root.hidden = true; };
+  openPreferences?.addEventListener('click', () => { preferences.input.value = customInstructions; preferences.root.hidden = false; preferences.input.focus(); });
+  $('preferences-close')?.addEventListener('click', closePreferences);
+  $('preferences-cancel')?.addEventListener('click', closePreferences);
+  preferences.root?.addEventListener('click', (event) => { if (event.target === preferences.root) closePreferences(); });
+  preferences.form?.addEventListener('submit', (event) => { event.preventDefault(); customInstructions = preferences.input.value.trim().slice(0,3000); try { localStorage.setItem(INSTRUCTIONS_KEY, customInstructions); } catch { /* storage unavailable */ } preferences.status.textContent = 'Instruções salvas neste navegador.'; setTimeout(closePreferences, 650); });
   el.input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); el.form.requestSubmit(); }
   });
@@ -717,6 +730,8 @@
   });
   ui.limitNew.addEventListener('click', () => el.newChat.click());
   el.messages.addEventListener('click', async (e) => {
+    const answerBtn = e.target.closest('.copy-answer');
+    if (answerBtn) { const msg = answerBtn.closest('.msg'); const text = msg?.querySelector('.bubble')?.innerText || ''; try { await navigator.clipboard.writeText(text); answerBtn.textContent = 'Copiado'; } catch { answerBtn.textContent = 'Falha ao copiar'; } setTimeout(() => { answerBtn.textContent = 'Copiar resposta'; }, 1500); return; }
     const btn = e.target.closest('.copy');
     if (!btn) return;
     const code = btn.closest('.code').querySelector('code').textContent;
