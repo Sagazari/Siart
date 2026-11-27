@@ -118,6 +118,28 @@ test('PDF gerado é válido, paginado e contém o texto', () => {
 });
 
 // ---------- ferramentas ----------
+test('review_website identifica falhas e aprova estrutura responsiva básica', () => {
+  const ws = newWs();
+  ws.write('index.html', '<!doctype html><html><head></head><body><h1>Oi</h1></body></html>');
+  let report = runTool(ws, 'review_website', {});
+  assert.equal(report.ok, true);
+  assert.equal(report.review.ok, false);
+  assert.ok(report.review.issues.some((x) => x.code === 'missing-viewport'));
+  ws.write('index.html', '<!doctype html><html lang="pt-BR"><head><title>Site</title><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="styles.css"></head><body><main><h1>Olá</h1><a href="#contato">Contato</a><section id="contato"></section></main><script src="app.js"></script></body></html>');
+  ws.write('styles.css', 'body{margin:0} .container{display:grid} @media(max-width:600px){.container{display:block}}');
+  ws.write('app.js', 'const ready = true;');
+  report = runTool(ws, 'review_website', {});
+  assert.equal(report.ok, true);
+  assert.equal(report.review.ok, true);
+  assert.deepEqual(report.review.issues, []);
+  assert.equal(report.review.checked.html, 1);
+  ws.write('app.js', 'function {');
+  report = runTool(ws, 'review_website', {});
+  assert.equal(report.ok, true);
+  assert.equal(report.review.ok, false);
+  assert.ok(report.review.issues.some((x) => x.code === 'js-syntax'));
+});
+
 test('runTool valida argumentos e devolve erros previsíveis', () => {
   const ws = newWs();
   assert.equal(runTool(ws, 'write_project_file', { path: 'a.md' }).ok, false);
@@ -169,8 +191,10 @@ test('agente executa ferramentas, grava no projeto e continua até a resposta fi
       const body = JSON.parse(b);
       requests.push(body);
       const last = body.messages[body.messages.length - 1];
-      if (last.role === 'tool') return sse(res, [{ content: 'Criei o index.html.' }]);
-      sse(res, toolCall('c1', 'write_project_file', JSON.stringify({ path: 'index.html', content: '<h1>Oi</h1>' })));
+      if (last.role === 'tool' && last.name === 'write_project_file') return sse(res, [{ content: 'Criei o index.html.' }]);
+      if (last.role === 'user' && String(last.content).includes('PRECISA chamar review_website')) return sse(res, toolCall('c2', 'review_website', '{}'));
+      if (last.role === 'tool' && last.name === 'review_website') return sse(res, [{ content: 'Criei e revisei o index.html.' }]);
+      sse(res, toolCall('c1', 'write_project_file', JSON.stringify({ path: 'index.html', content: '<!doctype html><html lang="pt-BR"><head><title>Site</title><meta name="viewport" content="width=device-width, initial-scale=1"><style>.layout{display:grid}@media(max-width:600px){.layout{display:block}}</style></head><body><main><h1>Oi</h1></main></body></html>' })));
     });
   });
   const server = createServer(cfgFor({ baseUrl: `http://127.0.0.1:${mock.address().port}/v1` }));
@@ -188,14 +212,17 @@ test('agente executa ferramentas, grava no projeto e continua até a resposta fi
     assert.equal(done.data.tool, 'write_project_file');
     assert.equal(done.data.path, 'index.html');
     assert.equal(done.data.mutated, true);
-    assert.equal(ev.filter((e) => e.event === 'message.delta').map((e) => e.data.text).join('').trim(), 'Criei o index.html.');
-    assert.equal(requests.length, 2);
+    assert.equal(ev.filter((e) => e.event === 'message.delta').map((e) => e.data.text).join('').trim(), 'Criei e revisei o index.html.');
+    assert.equal(requests.length, 4);
     assert.ok(requests[0].tools.length >= 6);
     assert.equal(requests[1].messages.at(-1).role, 'tool');
     assert.equal(JSON.parse(requests[1].messages.at(-1).content).ok, true);
+    assert.match(requests[2].messages.at(-1).content, /PRECISA chamar review_website/);
+    assert.equal(requests[3].messages.at(-1).name, 'review_website');
+    assert.equal(JSON.parse(requests[3].messages.at(-1).content).review.ok, true);
 
     const file = await fetch(`http://127.0.0.1:${port}/api/file?path=index.html`, { headers: { Cookie: cookie } });
-    assert.equal((await file.json()).content, '<h1>Oi</h1>');
+    assert.match((await file.json()).content, /<h1>Oi<\/h1>/);
   } finally { await close(server); await close(mock); }
 });
 

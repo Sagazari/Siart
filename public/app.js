@@ -128,7 +128,7 @@
   }
 
   const TOOL_LABEL = {
-    list_project_files: 'Mapeando a estrutura do projeto', read_project_file: 'Analisando arquivo',
+    list_project_files: 'Mapeando a estrutura do projeto', review_website: 'Revisando o site antes da entrega', read_project_file: 'Analisando arquivo',
     write_project_file: 'Construindo arquivo', apply_file_patch: 'Refinando implementação',
     create_project_directory: 'Organizando diretórios', rename_project_file: 'Reorganizando arquivos',
     generate_pdf: 'Preparando documento',
@@ -181,7 +181,10 @@
         head.append(label); status.append(head);
       } else {
         const head = document.createElement('div'); head.className = 'work-head';
-        const label = document.createElement('span'); label.className = 'work-current'; label.textContent = 'Etapas executadas';
+        if (m.completed) {
+          const done = document.createElement('span'); done.className = 'work-done-icon'; done.setAttribute('aria-label', 'Concluído'); done.textContent = '✓'; head.append(done);
+        }
+        const label = document.createElement('span'); label.className = 'work-current' + (m.completed ? ' is-done' : ''); label.textContent = m.completed ? 'Concluído' : 'Etapas executadas';
         head.append(label); status.append(head);
       }
       if (m.activities && m.activities.length) {
@@ -189,8 +192,9 @@
         m.activities.forEach((a) => {
           const item = document.createElement('li');
           const state = document.createElement('span'); state.className = 'st ' + a.status;
-          state.textContent = a.status === 'running' ? 'em andamento' : a.status === 'failed' ? 'falhou' : 'concluído';
-          const label = document.createElement('span'); label.textContent = a.label;
+          state.setAttribute('aria-label', a.status === 'running' ? 'Em andamento' : a.status === 'failed' ? 'Falhou' : 'Concluído');
+          state.textContent = a.status === 'running' ? '◌' : a.status === 'failed' ? '!' : '✓';
+          const label = document.createElement('span'); label.className = 'activity-label' + (a.status === 'running' ? ' is-running' : ''); label.textContent = a.label;
           item.append(state, label);
           if (a.detail) { const detail = document.createElement('code'); detail.textContent = a.detail; item.append(detail); }
           list.append(item);
@@ -486,7 +490,7 @@
       }
       await readSSE(res.body, (event, data) => {
         if (event === 'task.started') { reply.working = true; reply.stage = 'Analisando sua solicitação...'; refreshLast(reply);
-        } else if (event === 'task.completed') { reply.working = false;
+        } else if (event === 'task.completed') { reply.working = false; reply.completed = true;
         } else if (event === 'message.delta') {
           reply.content += data.text;
           const bubble = el.messages.querySelector('.msg:last-child .bubble');
@@ -502,7 +506,8 @@
           refreshLast(reply);
         } else if (event === 'tool.started') {
           reply.stage = TOOL_LABEL[data.tool] || 'Executando uma etapa da tarefa...';
-          (reply.activities ||= []).push({ id: data.callId, label: reply.stage, detail: data.path || '', status: 'running' });
+          const actionLabel = ['write_project_file', 'read_project_file', 'apply_file_patch'].includes(data.tool) && data.path ? reply.stage + ' ' + data.path : reply.stage;
+          (reply.activities ||= []).push({ id: data.callId, label: actionLabel, detail: '', status: 'running' });
           refreshLast(reply);
         } else if (event === 'tool.completed' || event === 'tool.failed') {
           const activity = (reply.activities || []).find((a) => a.id === data.callId && a.status === 'running');

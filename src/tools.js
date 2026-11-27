@@ -10,6 +10,7 @@ const fn = (name, description, properties, required = []) => ({
 
 const TOOLS = [
   fn('list_project_files', 'Lista os arquivos e pastas do projeto do usuário.', {}),
+  fn('review_website', 'Revisa estaticamente o site antes da entrega: HTML, metadados, responsividade, links e sintaxe JavaScript. Use obrigatoriamente depois de criar ou alterar um site; corrija todos os erros e execute a revisão novamente.', {}),
   fn('read_project_file', 'Lê o conteúdo de um arquivo de texto do projeto.', { path: str('Caminho relativo, ex.: src/app.js') }, ['path']),
   fn('write_project_file', 'Cria um arquivo ou substitui o conteúdo inteiro de um arquivo existente. Para mudanças pequenas prefira apply_file_patch.',
     { path: str('Caminho relativo'), content: str('Conteúdo completo do arquivo') }, ['path', 'content']),
@@ -36,6 +37,10 @@ function runTool(ws, name, args) {
       case 'list_project_files': {
         const { files, dirs } = ws.list();
         return { ok: true, files: files.map((f) => ({ path: f.path, bytes: f.size })), dirs };
+      }
+      case 'review_website': {
+        const report = ws.reviewWebsite();
+        return { ok: true, review: report };
       }
       case 'read_project_file': {
         needStrings(args, ['path']);
@@ -111,9 +116,10 @@ Regras de uso:
 - Durante a execução, use as ferramentas sem narrar código-fonte, comandos internos, JSON ou patches na mensagem ao usuário. As chamadas de ferramenta são o espaço de implementação.
 - Para mudanças pequenas use apply_file_patch; reescreva um arquivo inteiro só quando necessário. Não apague nem remova funcionalidades sem o usuário pedir.
 - Só diga "criei", "editei" ou "gerei" depois que a ferramenta retornar ok. Se uma ferramenta falhar, conte o que falhou e o que permaneceu intacto.
-- Você NÃO tem ferramenta para excluir arquivos, executar código, rodar testes nem ver a prévia. O usuário exclui arquivos pelo painel e vê a prévia HTML (index.html) na aba Prévia. Não afirme que testou ou que a prévia funciona.
+- Você tem a ferramenta review_website para fazer uma revisão estática do site. Ela verifica estrutura HTML, title, viewport, IDs duplicados, links internos, recursos locais, CSS responsivo e sintaxe JavaScript sem executar o código. Ela NÃO substitui um teste visual em navegador real.
 - Extensões permitidas: ${[...EDITABLE].join(', ')} (e .pdf via generate_pdf). Limites: 200 arquivos, 512 KB por arquivo, 5 MB no total.
-- Para um site simples, crie index.html (com CSS e JS em arquivos separados ou embutidos). Não use recursos externos que o usuário não pediu.
+- Para sites, entregue uma experiência profissional e responsiva: crie index.html, CSS e JavaScript quando necessário, com hierarquia visual, espaçamento, tipografia, navegação e estados interativos consistentes. Não entregue HTML puro sem estilos.
+- REGRA OBRIGATÓRIA DE ENTREGA DE SITES: depois de criar/alterar os arquivos do site, chame review_website. Se houver issues, corrija-os e chame a revisão novamente. Não declare o site concluído enquanto houver issues. Se restarem warnings, avalie e corrija os relevantes. Seja transparente: a revisão é estática e não equivale a abrir a página num navegador real.
 - Ao terminar, resuma os arquivos criados ou alterados e como o usuário pode conferir o resultado.`;
 }
 

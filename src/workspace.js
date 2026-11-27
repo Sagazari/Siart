@@ -203,6 +203,65 @@ function createWorkspace(root, limits = LIMITS) {
     } catch { return []; }
   }
 
+  // Revisão estática automática do site antes da entrega. Não executa scripts do usuário.
+  function reviewWebsite() {
+    const issues = [];
+    const warnings = [];
+    const files = list().files;
+    const byPath = new Map(files.map((f) => [f.path, f]));
+    const htmlFiles = files.filter((f) => /\.html?$/i.test(f.path));
+    if (!byPath.has('index.html')) issues.push({ severity: 'error', code: 'missing-index', message: 'O projeto não contém index.html na raiz.' });
+    if (!htmlFiles.length) issues.push({ severity: 'error', code: 'missing-html', message: 'Nenhum arquivo HTML foi encontrado.' });
+
+    for (const file of htmlFiles) {
+      const html = read(file.path).content;
+      const hasTitle = /<title\b[^>]*>\s*[^<]+/i.test(html);
+      const hasViewport = /<meta\s+[^>]*name=["']viewport["']/i.test(html);
+      const hasLang = /<html\b[^>]*\blang=["'][^"']+/i.test(html);
+      const hasMain = /<main\b/i.test(html);
+      const hasHeading = /<h1\b/i.test(html);
+      if (!hasTitle) issues.push({ severity: 'error', code: 'missing-title', path: file.path, message: 'Adicione um <title> descritivo.' });
+      if (!hasViewport) issues.push({ severity: 'error', code: 'missing-viewport', path: file.path, message: 'Falta a meta viewport para responsividade em celulares.' });
+      if (!hasLang) warnings.push({ code: 'missing-lang', path: file.path, message: 'Defina o idioma no elemento <html>.' });
+      if (!hasMain) warnings.push({ code: 'missing-main', path: file.path, message: 'Considere organizar o conteúdo principal dentro de <main>.' });
+      if (!hasHeading) warnings.push({ code: 'missing-h1', path: file.path, message: 'A página não tem um título principal <h1>.' });
+      if (!/<\/body\s*>/i.test(html) || !/<\/html\s*>/i.test(html)) issues.push({ severity: 'error', code: 'unclosed-document', path: file.path, message: 'Documento HTML sem fechamento de body/html.' });
+      const ids = [...html.matchAll(/\bid=["']([^"']+)["']/gi)].map((m) => m[1]);
+      const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+      if (dupes.length) issues.push({ severity: 'error', code: 'duplicate-ids', path: file.path, message: `IDs duplicados: ${[...new Set(dupes)].join(', ')}.` });
+      for (const m of html.matchAll(/\bhref=["']#([^"']+)["']/gi)) {
+        if (m[1] && !ids.includes(m[1])) warnings.push({ code: 'broken-anchor', path: file.path, message: `Link interno #${m[1]} não encontra um elemento com esse ID.` });
+      }
+      for (const m of html.matchAll(/<(?:link|script)\b[^>]*(?:href|src)=["']([^"']+)["'][^>]*>/gi)) {
+        const asset = m[1];
+        if (/^(?:https?:)?\/\//i.test(asset) || /^(?:data:|#)/i.test(asset)) continue;
+        const clean = asset.split(/[?#]/)[0].replace(/^\.\//, '');
+        const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file.path), clean));
+        if (resolved.startsWith('../') || !byPath.has(resolved)) warnings.push({ code: 'missing-asset', path: file.path, message: `Recurso referenciado não encontrado: ${asset}.` });
+      }
+    }
+
+    const cssFiles = files.filter((f) => /\.css$/i.test(f.path));
+    const cssText = cssFiles.map((f) => read(f.path).content).join('\n');
+    const inlineStyles = htmlFiles.some((f) => /<style\b/i.test(read(f.path).content));
+    const hasCss = cssFiles.length > 0 || inlineStyles;
+    if (!hasCss) issues.push({ severity: 'error', code: 'missing-styles', message: 'Nenhum CSS foi encontrado; a página pode estar sem identidade visual.' });
+    if (hasCss && !/@media\b/i.test(cssText) && !htmlFiles.some((f) => /<style\b[^>]*>[\s\S]*?@media\b/i.test(read(f.path).content))) {
+      issues.push({ severity: 'error', code: 'missing-responsive-css', message: 'Não foi encontrada media query CSS para adaptar o layout a telas menores.' });
+    }
+    if (hasCss && !/(?:display\s*:\s*(?:grid|flex)|\.container|\.wrapper)/i.test(cssText) && !htmlFiles.some((f) => /<style\b[^>]*>[\s\S]*?(?:display\s*:\s*(?:grid|flex)|\.container|\.wrapper)/i.test(read(f.path).content))) {
+      warnings.push({ code: 'basic-layout', message: 'Não foi detectada uma estrutura de layout comum (grid/flex/container); confira o acabamento visual.' });
+    }
+    const jsFiles = files.filter((f) => /\.m?js$/i.test(f.path));
+    for (const f of jsFiles) {
+      const source = read(f.path).content;
+      try { new (require('node:vm').Script)(source, { filename: f.path }); }
+      catch (e) { issues.push({ severity: 'error', code: 'js-syntax', path: f.path, message: `Erro de sintaxe JavaScript: ${e.message.slice(0, 240)}` }); }
+    }
+    return { ok: issues.length === 0, checked: { html: htmlFiles.length, css: cssFiles.length, javascript: jsFiles.length }, issues, warnings,
+      note: 'Revisão estática: não executa JavaScript nem substitui teste visual em navegador real.' };
+  }
+
   function exportZip() {
     const { files } = walk();
     return createZip(files.map((f) => ({ name: f.path, data: fs.readFileSync(abs(f.path)) })));
@@ -210,7 +269,7 @@ function createWorkspace(root, limits = LIMITS) {
 
   function destroy() { fs.rmSync(root, { recursive: true, force: true }); }
 
-  return { list, usage, read, readRaw, write, writePdf, patch, mkdir, remove, rename, changes, exportZip, destroy, touch };
+  return { list, usage, read, readRaw, write, writePdf, patch, mkdir, remove, rename, changes, reviewWebsite, exportZip, destroy, touch };
 }
 
 // Remove espaços de trabalho sem uso há mais de maxAgeMs (política de retenção).

@@ -102,7 +102,7 @@ async function streamCompletion({ provider, body, signal, firstByteMs, onText })
 }
 
 // Tenta os provedores do nível em ordem. Só troca de provedor se nada foi enviado ao usuário nessa tentativa.
-async function completeWithFallback({ cfg, tier, candidates, buildBody, call, state, signal, send, log, taskId, health, onText }) {
+async function completeWithFallback({ cfg, tier, candidates, buildBody, call, state, signal, send, log, taskId, health, onText, deferFinal = false }) {
   const isCool = (c) => health.cooling(c.provider) || health.cooling(`${c.provider}:${c.model}`);
   const healthy = candidates.filter((c) => !isCool(c));
   // se todos estão em pausa, tenta mesmo assim, na ordem original
@@ -125,7 +125,7 @@ async function completeWithFallback({ cfg, tier, candidates, buildBody, call, st
         result = await streamCompletion({
           provider, signal, firstByteMs: tier.firstByteMs, body: buildBody(c, call.useTools),
           // Em ciclos com ferramentas, o conteúdo fica em buffer até sabermos se é código intermediário.
-          onText: (t) => { if (!call.useTools) { emitted = true; announce(); onText(t); } else bufferedChunks.push(t); },
+          onText: (t) => { if (!call.useTools && !deferFinal) { emitted = true; announce(); onText(t); } else bufferedChunks.push(t); },
         });
       } catch (err) {
         // Se o stream cair antes de completar uma resposta sem tool-call, preserva o texto parcial
@@ -137,7 +137,7 @@ async function completeWithFallback({ cfg, tier, candidates, buildBody, call, st
       }
       if (!result.text && !result.calls.length) throw Object.assign(new Error('empty'), { emptyResponse: true });
       announce();
-      if (call.useTools && !result.calls.length && bufferedChunks.length) { emitted = true; bufferedChunks.forEach(onText); }
+      if (call.useTools && !result.calls.length && bufferedChunks.length && !deferFinal) { emitted = true; bufferedChunks.forEach(onText); }
       health.clear(c.provider);
       const at = candidates.indexOf(c); // a próxima chamada da tarefa começa por quem funcionou
       if (at > 0) { candidates.splice(at, 1); candidates.unshift(c); }
@@ -168,6 +168,7 @@ async function completeWithFallback({ cfg, tier, candidates, buildBody, call, st
 // Conversa com o modelo; com workspace e ferramentas ligadas, repete (modelo -> ferramentas -> modelo).
 async function runAgent({ cfg, tier, messages, ws, send, signal, log, taskId, health }) {
   const hasImages = messages.some((m) => Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'));
+  const requestedWebsite = messages.some((m) => m.role === 'user' && typeof m.content === 'string' && /\b(site|website|p[aá]gina|landing\s*page|html|web\s*app)\b/i.test(m.content));
   let candidates = tier.chain.filter((c) => cfg.providers[c.provider] && cfg.providers[c.provider].apiKey);
   if (hasImages) {
     const gemini = cfg.providers.gemini;
@@ -195,14 +196,30 @@ async function runAgent({ cfg, tier, messages, ws, send, signal, log, taskId, he
 
   let steps = 0;
   let emitted = false;
+  let siteDirty = false;
+  let siteReviewed = false;
   for (;;) {
     const call = { useTools: state.toolsOn && steps < cfg.maxToolSteps };
     if (state.toolsOn && !call.useTools) state.syncPrompt(false); // limite de passos: pede a resposta final sem ferramentas
     const result = await completeWithFallback({
       cfg, tier, candidates, buildBody, call, state, signal, send, log, taskId, health,
       onText: (t) => { emitted = true; send('message.delta', { text: t }); },
+      deferFinal: requestedWebsite && (call.useTools || (siteDirty && !siteReviewed)),
     });
-    if (!call.useTools || result.calls.length === 0) return;
+    if (!call.useTools) {
+      if (siteDirty && !siteReviewed) send('message.delta', { text: '\n\nNão vou marcar o site como concluído: a revisão obrigatória não foi executada ou ainda apontou problemas. Tente novamente para que eu possa revisar e corrigir os arquivos.' });
+      else if (requestedWebsite && result.text && !emitted) send('message.delta', { text: result.text });
+      return;
+    }
+    if (result.calls.length === 0) {
+      if (siteDirty && !siteReviewed) {
+        history.push({ role: 'assistant', content: result.text || '' });
+        history.push({ role: 'user', content: 'Antes de responder ao usuário, você PRECISA chamar review_website agora. Corrija todos os erros reportados e repita a revisão até que ela retorne ok=true. Não declare conclusão sem isso.' });
+        continue;
+      }
+      if (requestedWebsite && call.useTools && result.text) send('message.delta', { text: result.text });
+      return;
+    }
 
     steps++;
     history.push({
@@ -229,6 +246,8 @@ async function runAgent({ cfg, tier, messages, ws, send, signal, log, taskId, he
         out = { ok: false, error: 'Falha interna ao executar a ferramenta.' };
       }
       log({ event: 'tool', taskId, tool: c.name, ok: out.ok, ms: Date.now() - t0 });
+      if (out.ok && MUTATING.has(c.name) && typeof info.path === 'string' && /\.(?:html?|css|m?js)$/i.test(info.path)) { siteDirty = true; siteReviewed = false; }
+      if (out.ok && c.name === 'review_website' && out.review) siteReviewed = out.review.ok && out.review.issues.length === 0;
       if (out.ok) send('tool.completed', { ...info, mutated: MUTATING.has(c.name) });
       else send('tool.failed', { ...info, message: out.error });
       history.push({ role: 'tool', tool_call_id: c.id, name: c.name, content: JSON.stringify(out) });

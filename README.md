@@ -114,3 +114,11 @@ A variável `GROQ_MODEL` da versão anterior não existe mais: use `TIER_*`.
 - Para criação de sites e documentos, a IA deve assumir padrões profissionais quando faltarem detalhes opcionais, evitando interromper o trabalho para perguntar o título da aba.
 
 **Limites que permanecem:** pesquisa real na web e busca de imagens externas ainda não estão integradas; o modo de estudo usa as capacidades conversacionais do modelo, sem um banco de questões ou currículo próprio. Visão de imagens depende de uma chave Gemini válida. O histórico das conversas continua salvo no navegador.
+
+
+## Siart AI 1.3.3 — revisão obrigatória antes da entrega
+
+- Ao criar ou alterar um site, o agente precisa executar `review_website` antes de liberar a resposta final. Se tentar encerrar sem revisar, o servidor segura a resposta e exige a revisão.
+- A revisão verifica HTML (título, viewport, idioma, estrutura, IDs duplicados e âncoras), recursos locais, presença de CSS, media queries responsivas e sintaxe JavaScript sem executar o código.
+- Erros encontrados retornam ao agente para correção e nova revisão. O site só é marcado como concluído quando a revisão estática não aponta erros.
+- A revisão é estática: não substitui a abertura da prévia nem testes visuais/interativos em um navegador real.

@@ -445,3 +445,19 @@ button, a, input, textarea, select, .chip, .tier, .btn-project, .btn-new,
 .empty .logo-wrap::before { background: none !important; animation: none !important; }
 .empty .logo-wrap .logo { filter: grayscale(1) !important; }
 .err, .stopped, .notice, .banner { border-color: #555 !important; color: #ccc !important; }
+
+/* Linha do tempo de ações: mostra o que a Siart está fazendo, como um registro vivo. */
+.work-status { width: min(100%, 720px) !important; }
+.work-head { gap: 9px !important; margin-bottom: 5px; }
+.activity { margin: 9px 0 0 27px !important; gap: 8px !important; }
+.activity li { display: grid !important; grid-template-columns: 18px minmax(0,1fr); align-items: start !important; gap: 8px !important; min-height: 22px; line-height: 1.45; }
+.activity .st { display: inline-flex; align-items: center; justify-content: center; width: 17px; min-width: 17px !important; height: 17px; font-size: 13px !important; font-weight: 700; line-height: 1; }
+.activity .st.done { color: #55d98a !important; }
+.activity .st.running { color: #e5e5e5 !important; animation: siart-action-pulse 1.15s ease-in-out infinite; }
+.activity .st.failed { color: #ff7777 !important; }
+.activity-label { color: #a9a9a9; font-size: 12.5px; overflow-wrap: anywhere; }
+.activity-label.is-running { color: transparent !important; background: linear-gradient(100deg,#777 0%,#f4f4f4 48%,#777 100%); background-size: 220% 100%; background-clip: text; -webkit-background-clip: text; animation: siart-monochrome-flow 2.6s linear infinite; }
+.work-done-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: #071b10; background: linear-gradient(145deg,#8cffb2,#20c768 58%,#0b8f45); box-shadow: 0 0 12px rgba(40,210,110,.2); font-size: 13px; font-weight: 900; }
+.work-current.is-done { color: #d9d9d9 !important; background: none !important; -webkit-text-fill-color: currentColor; animation: none !important; }
+@keyframes siart-action-pulse { 0%,100% { opacity:.5; transform:rotate(0deg); } 50% { opacity:1; transform:rotate(180deg); } }
+@media (prefers-reduced-motion: reduce) { .activity .st.running, .activity-label.is-running { animation:none !important; } }
