@@ -14,8 +14,8 @@ const PROVIDER_DEFS = {
 // Ordem de tentativa: o primeiro provedor configurado que responder é usado; se falhar, passa ao próximo.
 const TIER_DEFS = {
   absoluty: {
-    name: 'Absoluty', version: '1.1',
-    description: 'O melhor: alto processamento, ideal para desenvolvimento e tarefas difíceis. Mais lento.',
+    name: 'Absoluty GTI', version: '1.2',
+    description: 'Absoluty Grand Technical Intelligence: nível de maior capacidade, com raciocínio alto e ferramentas para tarefas técnicas e complexas.',
     chain: 'mistral:mistral-large-latest,gemini:gemini-2.5-pro,groq:openai/gpt-oss-120b,openrouter:nvidia/nemotron-3-ultra-550b-a55b:free,sambanova:gpt-oss-120b',
     temperature: 0.3, maxTokens: 8192, effort: 'high', tools: true, firstByteMs: 60_000,
   },

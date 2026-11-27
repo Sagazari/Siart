@@ -152,12 +152,31 @@
       markNew(d, f);
       wrap.append(d);
     });
-    if (live && m.working) {
-      const status = document.createElement('div'); status.className = 'work-status';
-      const head = document.createElement('div'); head.className = 'work-head';
-      head.innerHTML = '<svg class="logo moon-spin" viewBox="0 0 32 32"><use href="#moon"/></svg>';
-      const label = document.createElement('span'); label.className = 'work-current rise-in'; label.textContent = m.stage || 'Analisando sua solicitação...';
-      head.append(label); status.append(head);
+    if ((live && m.working) || (m.activities && m.activities.length)) {
+      const status = document.createElement('div'); status.className = 'work-status' + (live && m.working ? ' is-running' : '');
+      if (live && m.working) {
+        const head = document.createElement('div'); head.className = 'work-head';
+        head.innerHTML = '<svg class="logo moon-spin" viewBox="0 0 32 32"><use href="#moon"/></svg>';
+        const label = document.createElement('span'); label.className = 'work-current rise-in'; label.textContent = m.stage || 'Analisando sua solicitação...';
+        head.append(label); status.append(head);
+      } else {
+        const head = document.createElement('div'); head.className = 'work-head';
+        const label = document.createElement('span'); label.className = 'work-current'; label.textContent = 'Etapas executadas';
+        head.append(label); status.append(head);
+      }
+      if (m.activities && m.activities.length) {
+        const list = document.createElement('ul'); list.className = 'activity';
+        m.activities.forEach((a) => {
+          const item = document.createElement('li');
+          const state = document.createElement('span'); state.className = 'st ' + a.status;
+          state.textContent = a.status === 'running' ? 'em andamento' : a.status === 'failed' ? 'falhou' : 'concluído';
+          const label = document.createElement('span'); label.textContent = a.label;
+          item.append(state, label);
+          if (a.detail) { const detail = document.createElement('code'); detail.textContent = a.detail; item.append(detail); }
+          list.append(item);
+        });
+        status.append(list);
+      }
       wrap.append(status);
     }
     const bubble = document.createElement('div');
@@ -414,7 +433,7 @@
         throw new Error(j.error || 'Erro ' + res.status + ' ao enviar a mensagem.');
       }
       await readSSE(res.body, (event, data) => {
-        if (event === 'task.started') { reply.working = true; refreshLast(reply);
+        if (event === 'task.started') { reply.working = true; reply.stage = 'Analisando sua solicitação...'; refreshLast(reply);
         } else if (event === 'task.completed') { reply.working = false;
         } else if (event === 'message.delta') {
           reply.content += data.text;
@@ -431,8 +450,11 @@
           refreshLast(reply);
         } else if (event === 'tool.started') {
           reply.stage = TOOL_LABEL[data.tool] || 'Executando uma etapa da tarefa...';
+          (reply.activities ||= []).push({ id: data.callId, label: reply.stage, detail: data.path || '', status: 'running' });
           refreshLast(reply);
         } else if (event === 'tool.completed' || event === 'tool.failed') {
+          const activity = (reply.activities || []).find((a) => a.id === data.callId && a.status === 'running');
+          if (activity) { activity.status = event === 'tool.failed' ? 'failed' : 'done'; if (event === 'tool.failed') activity.detail = data.message || activity.detail; }
           if (event === 'tool.failed') reply.stage = 'Reavaliando a etapa e preparando uma alternativa...';
           else reply.stage = 'Integrando os resultados...';
           refreshLast(reply);

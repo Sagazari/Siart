@@ -60,7 +60,7 @@ test('parseChain aceita modelos com ":" e ignora entradas inválidas', () => {
 
 test('níveis têm nomes, versões e cadeias padrão; TIER_* sobrescreve; disponibilidade segue as chaves', () => {
   const tiers = buildTiers({});
-  assert.deepEqual(Object.values(tiers).map((t) => t.label), ['Absoluty 1.1', 'Moyenne 1', 'Basse 0.1']);
+  assert.deepEqual(Object.values(tiers).map((t) => t.label), ['Absoluty GTI 1.2', 'Moyenne 1', 'Basse 0.1']);
   assert.equal(tiers.basse.tools, false);
   assert.equal(tiers.absoluty.tools, true);
   assert.ok(Object.values(tiers).every((t) => new Set(t.chain.map((c) => c.provider)).size === 5));
@@ -86,7 +86,7 @@ test('/api/status lista níveis, provedores configurados (sem chaves) e limites'
     assert.equal(st.ready, true);
     assert.equal(st.defaultTier, 'moyenne');
     assert.deepEqual(st.limits, { maxConversations: 12, maxMessages: 10 });
-    assert.deepEqual(st.tiers.map((t) => t.label), ['Absoluty 1.1', 'Moyenne 1', 'Basse 0.1']);
+    assert.deepEqual(st.tiers.map((t) => t.label), ['Absoluty GTI 1.2', 'Moyenne 1', 'Basse 0.1']);
     assert.deepEqual(st.tiers.find((t) => t.id === 'moyenne').providers.sort(), ['Groq', 'Mistral']);
     assert.equal(st.tiers.find((t) => t.id === 'basse').tools, false);
   } finally { await close(server); }

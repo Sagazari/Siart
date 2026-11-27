@@ -15,7 +15,7 @@ npm test                    # 38 testes, sem rede externa
 
 | Nível | Para quê | Esforço de raciocínio | Tokens | Ferramentas de projeto |
 |---|---|---|---|---|
-| **Absoluty 1.1** | O melhor: alto processamento, bom em desenvolvimento. Mais lento. | alto | 8192 | sim |
+| **Absoluty GTI 1.2** | Absoluty Grand Technical Intelligence: maior capacidade de raciocínio e ferramentas para tarefas complexas. | alto | 8192 | sim |
 | **Moyenne 1** | Equilíbrio entre qualidade e velocidade. É o padrão. | médio | 4096 | sim |
 | **Basse 0.1** | Rápida e simples, boa para conversa. Fraca em tarefas complexas. | baixo | 2048 | não (`TIER_BASSE_TOOLS=1` liga) |
 
