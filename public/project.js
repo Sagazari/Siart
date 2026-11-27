@@ -17,6 +17,7 @@
   let view = 'files';
   let previewLoaded = false;
   let previewStale = false;
+  let preferredPreviewEntry = null;
 
   async function api(url, opts = {}) {
     const res = await fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } });
@@ -208,7 +209,7 @@
   window.addEventListener('beforeunload', (e) => { if (anyDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
   // ---------- Prévia ----------
-  const htmlEntry = () => (files.find((f) => f.path === 'index.html') || files.find((f) => /\.html?$/i.test(f.path)) || {}).path;
+  const htmlEntry = () => (files.find((f) => f.path === preferredPreviewEntry) || files.find((f) => f.path === 'index.html') || files.find((f) => /\.html?$/i.test(f.path)) || {}).path;
   async function loadPreview(force) {
     const entry = htmlEntry();
     el.vEmpty.hidden = Boolean(entry);
@@ -235,6 +236,18 @@
   // ---------- Integração com o chat ----------
   window.SiartProject = {
     refresh,
+    async openPreview(path) {
+      preferredPreviewEntry = path || null;
+      el.panel.hidden = false;
+      el.open.setAttribute('aria-expanded', 'true');
+      await refresh();
+      if (path && !files.some((f) => f.path === path)) {
+        el.vEmpty.hidden = false;
+        el.vEmpty.textContent = 'O arquivo HTML não está disponível no projeto.';
+      }
+      setView('preview');
+      await loadPreview(true);
+    },
     // chamado quando a Siart altera arquivos
     async onMutation(path) {
       await refresh();

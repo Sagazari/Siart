@@ -8,7 +8,7 @@ Plataforma de IA para engenharia de software: chat com streaming, projeto de arq
 cp .env.example .env        # preencha GROQ_API_KEY
 node --env-file=.env src/server.js
 # abra http://localhost:3000
-npm test                    # 38 testes, sem rede externa
+npm test                    # 42 testes, sem rede externa
 ```
 
 ## Níveis de IA
@@ -89,7 +89,7 @@ A variável `GROQ_MODEL` da versão anterior não existe mais: use `TIER_*`.
 - **Sem contas de usuário.** Cada navegador recebe um identificador em cookie; limpar cookies perde o acesso aos arquivos. `ACCESS_CODE` é uma senha única compartilhada, não um sistema de login.
 - **Editor simples (textarea).** Não é o Monaco: não tem realce de sintaxe nem autocompletar. Trocar exige carregar o Monaco de uma CDN ou hospedá-lo e ajustar a CSP.
 - **Sem execução de código, testes ou terminal.** A prévia é só para HTML estático e JavaScript de navegador.
-- **Sem upload de ZIP, imagens, PDF ou DOCX/XLSX/PPTX**, e sem leitura de anexos ou visão.
+- **Anexos limitados:** imagens são redimensionadas e enviadas para análise via Gemini; arquivos de texto/código suportados podem ser anexados. ZIP, PDF e documentos Office não são interpretados nesta versão.
 - **Sem banco de dados:** o histórico de conversas fica só no navegador.
 - **Rate limit em memória:** vale para uma instância só.
 - Não foi testado com Groq, Gemini, Mistral ou OpenRouter reais nem em navegador real neste ambiente; os testes usam provedores simulados. Gemini e OpenRouter podem diferir em detalhes do streaming de tool calls; se algum falhar, o log mostra `provider_failed` e a Siart passa ao próximo.
@@ -102,3 +102,15 @@ A variável `GROQ_MODEL` da versão anterior não existe mais: use `TIER_*`.
 - Mistral: use `MISTRAL_API_KEY` válida. A conta precisa ter acesso ativo à API e faturamento habilitado no Mistral Studio; uma chave criada sem acesso/billing pode retornar 401/402.
 - OpenRouter: use `OPENROUTER_API_KEY` válida. Modelos gratuitos têm limites próprios de requisições e podem ficar temporariamente indisponíveis.
 - Para conferir o motivo exato de uma falha, abra **Render → serviço Siart → Logs** e procure `provider_failed`; o log inclui provedor, modelo, status HTTP e mensagem retornada pelo gateway, sem registrar a chave secreta.
+
+
+## Siart AI 1.3.0 — interface e experiência
+
+- Interface monocromática em preto, branco e cinza. A única animação de gradiente é o texto de atividade durante a execução; o status não recebe painel ou fundo colorido.
+- Cache-busting da folha de estilos e do JavaScript para que novas publicações não reutilizem os assets antigos.
+- Etapas de execução exibidas como texto simples e cartões de arquivos com ações de download e prévia HTML.
+- Sugestões rápidas para explicações, resumos, quizzes, planos de estudo e criação de sites.
+- Títulos locais das conversas classificados pelo assunto/intenção, em vez de copiar literalmente a primeira mensagem.
+- Para criação de sites e documentos, a IA deve assumir padrões profissionais quando faltarem detalhes opcionais, evitando interromper o trabalho para perguntar o título da aba.
+
+**Limites que permanecem:** pesquisa real na web e busca de imagens externas ainda não estão integradas; o modo de estudo usa as capacidades conversacionais do modelo, sem um banco de questões ou currículo próprio. Visão de imagens depende de uma chave Gemini válida. O histórico das conversas continua salvo no navegador.

@@ -7,9 +7,10 @@
   const ui = { tiers: $('tiers'), tierHint: $('tier-hint'), modelToggle: $('model-toggle'), modelPanel: $('model-panel'), notice: $('notice'), count: $('conv-count'), limitNote: $('limit-note'), limitText: $('limit-text'), limitNew: $('limit-new') };
   const STORE = 'siart.v1';
   const SUGGESTIONS = [
-    'Ajude-me a entender um assunto novo',
-    'Pesquise e organize estas informações',
-    'Ajude a planejar uma ideia do zero',
+    'Explique um assunto passo a passo',
+    'Crie um resumo e um quiz para estudar',
+    'Monte um plano de estudos',
+    'Crie um site profissional',
   ];
 
   const REASON = { rate_limit: 'atingiu o limite de uso', unavailable: 'está indisponível', auth: 'não aceitou a chave', timeout: 'demorou demais', model_unavailable: 'não tem esse modelo', billing: 'está sem créditos ou faturamento ativo', rejected: 'rejeitou a requisição (verifique modelo e parâmetros)', empty: 'não respondeu' };
@@ -42,6 +43,25 @@
     try { localStorage.setItem(STORE, JSON.stringify(state)); } catch { /* cota cheia ou bloqueado */ }
   }
   const active = () => state.chats.find((c) => c.id === state.activeId) || null;
+
+  // Títulos curtos pelo assunto/intenção, não uma cópia crua da primeira mensagem.
+  function subjectTitle(text, attachmentName = '') {
+    const raw = String(text || '').replace(/\s+/g, ' ').trim();
+    const source = raw || attachmentName || 'Nova conversa';
+    const clean = source.replace(/[.!?]+$/g, '').trim();
+    const rules = [
+      [/\b(site|website|p[aá]gina|landing page)\b/i, 'Criação de site'],
+      [/\b(estud|prova|quiz|resumo|mat[eé]ria|aprender)\b/i, 'Estudos e aprendizagem'],
+      [/\b(pesquis|fontes|refer[eê]ncias|artigo)\b/i, 'Pesquisa e referências'],
+      [/\b(c[oó]digo|program|bug|erro|javascript|python|html|css|api)\b/i, 'Desenvolvimento de software'],
+      [/\b(curr[ií]culo|portf[oó]lio|emprego|trabalho)\b/i, 'Carreira e portfólio'],
+      [/\b(plano|planej|organiza|cronograma)\b/i, 'Planejamento'],
+    ];
+    for (const [pattern, title] of rules) if (pattern.test(clean)) return title;
+    const words = clean.split(' ').filter(Boolean).slice(0, 5);
+    const title = words.join(' ');
+    return title.length > 42 ? title.slice(0, 39).trimEnd() + '…' : (title || 'Nova conversa');
+  }
 
   // ---------- Markdown mínimo e seguro (tudo é escapado antes de virar HTML) ----------
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -179,6 +199,28 @@
       }
       wrap.append(status);
     }
+    // Arquivos realmente gravados no workspace viram cartões com ações concretas.
+    (m.artifacts || []).forEach((artifact) => {
+      const card = document.createElement('section'); card.className = 'artifact-card';
+      const icon = document.createElement('span'); icon.className = 'artifact-icon';
+      icon.textContent = artifact.kind === 'pdf' ? 'PDF' : artifact.kind === 'html' ? 'HTML' : 'FILE';
+      const info = document.createElement('div'); info.className = 'artifact-info';
+      const name = document.createElement('strong'); name.textContent = artifact.path.split('/').pop();
+      const path = document.createElement('span'); path.textContent = artifact.path;
+      info.append(name, path);
+      const actions = document.createElement('div'); actions.className = 'artifact-actions';
+      const download = document.createElement('a'); download.className = 'artifact-btn primary';
+      download.href = '/api/download?path=' + encodeURIComponent(artifact.path);
+      download.setAttribute('download', artifact.path.split('/').pop()); download.textContent = 'Baixar arquivo';
+      actions.append(download);
+      if (artifact.kind === 'html') {
+        const preview = document.createElement('button'); preview.type = 'button'; preview.className = 'artifact-btn';
+        preview.textContent = 'Ver prévia';
+        preview.addEventListener('click', () => window.SiartProject?.openPreview(artifact.path));
+        actions.append(preview);
+      }
+      card.append(icon, info, actions); wrap.append(card);
+    });
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     if (m.role === 'user') {
@@ -323,22 +365,32 @@
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
+    const dispatch = (block) => {
+      let event = 'message', data = '';
+      block.replace(/\r/g, '').split('\n').forEach((line) => {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) data += (data ? '\n' : '') + line.slice(5).trim();
+      });
+      if (data) {
+        let payload;
+        try { payload = JSON.parse(data); } catch { return; }
+        onEvent(event, payload);
+      }
+    };
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
       let idx;
-      while ((idx = buf.indexOf('\n\n')) >= 0) {
+      while ((idx = buf.search(/\r?\n\r?\n/)) >= 0) {
         const block = buf.slice(0, idx);
-        buf = buf.slice(idx + 2);
-        let event = 'message', data = '';
-        block.split('\n').forEach((l) => {
-          if (l.startsWith('event:')) event = l.slice(6).trim();
-          else if (l.startsWith('data:')) data += l.slice(5).trim();
-        });
-        if (data) { try { onEvent(event, JSON.parse(data)); } catch (e) { if (e.isTaskError) throw e; } }
+        const separator = buf.slice(idx).match(/^\r?\n\r?\n/)[0];
+        buf = buf.slice(idx + separator.length);
+        dispatch(block);
       }
     }
+    buf += decoder.decode();
+    if (buf.trim()) dispatch(buf);
   }
 
 
@@ -411,7 +463,7 @@
     const extraText = attachmentCopy.filter((a) => typeof a.text === 'string')
       .map((a) => '\n\n[Conteúdo do arquivo ' + a.name + ']\n' + a.text).join('');
     chat.messages.push({ role: 'user', content: text + extraText, attachments: attachmentCopy.map((a) => ({ name: a.name, type: a.type, dataUrl: a.dataUrl || null })) });
-    if (chat.messages.length === 1) chat.title = (text || attachmentCopy[0]?.name || 'Arquivo enviado').replace(/\s+/g, ' ').slice(0, 48);
+    if (chat.messages.length === 1) chat.title = subjectTitle(text, attachmentCopy[0]?.name || '');
     const reply = { role: 'assistant', content: '', working: true, stage: initialWorkStage() };
     chat.messages.push(reply);
     chat.updatedAt = Date.now();
@@ -457,6 +509,12 @@
           if (activity) { activity.status = event === 'tool.failed' ? 'failed' : 'done'; if (event === 'tool.failed') activity.detail = data.message || activity.detail; }
           if (event === 'tool.failed') reply.stage = 'Reavaliando a etapa e preparando uma alternativa...';
           else reply.stage = 'Integrando os resultados...';
+          if (event === 'tool.completed' && data.mutated && data.path && ['write_project_file', 'apply_file_patch', 'generate_pdf'].includes(data.tool)) {
+            const ext = data.path.split('.').pop().toLowerCase();
+            const kind = ext === 'pdf' ? 'pdf' : ['html', 'htm'].includes(ext) ? 'html' : 'file';
+            (reply.artifacts ||= []);
+            if (!reply.artifacts.some((a) => a.path === data.path)) reply.artifacts.push({ path: data.path, kind });
+          }
           refreshLast(reply);
           if (event === 'tool.completed' && data.mutated && window.SiartProject) window.SiartProject.onMutation(data.path);
         } else if (event === 'task.failed') {

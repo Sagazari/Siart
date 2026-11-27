@@ -349,31 +349,99 @@ body { letter-spacing: -.012em; }
 .bubble .table-wrap { max-width:100%; overflow-x:auto; }
 .bubble table img { max-width:160px; max-height:120px; object-fit:cover; border-radius:6px; }
 
-/* Siart AI — camada de produto: identidade mais nítida e atividade visível */
-:root { --accent: #a5b4fc; --accent-2: #67e8f9; }
-.brand { letter-spacing: -.035em; font-weight: 750; }
-.brand .logo { filter: drop-shadow(0 0 12px rgba(129,140,248,.28)); }
-.topbar { background: rgba(16,16,18,.84) !important; backdrop-filter: blur(18px) !important; }
-.work-status { display: block !important; width: fit-content; max-width: min(100%, 620px); margin: 4px 0 14px; padding: 11px 14px; border: 1px solid rgba(129,140,248,.24); border-radius: 14px; background: linear-gradient(125deg, rgba(99,102,241,.105), rgba(34,211,238,.055) 55%, rgba(168,85,247,.07)); overflow: hidden; }
-.work-status.is-running { position: relative; }
-.work-status.is-running::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: linear-gradient(180deg,#818cf8,#22d3ee,#c084fc); }
+
+
+/* Siart AI — tema monocromático definitivo (última regra, sem camadas coloridas) */
+:root {
+  --accent: #c4c4c4 !important;
+  --accent-2: #f2f2f2 !important;
+  --danger: #bdbdbd !important;
+  --ok: #d0d0d0 !important;
+  --focus: #a8a8a8 !important;
+}
+html, body { background: #101010 !important; }
+.topbar { background: rgba(16,16,16,.96) !important; backdrop-filter: blur(12px) grayscale(1) !important; }
+.brand .logo, .work-head .logo, .login-box .logo { filter: grayscale(1) !important; }
+button, a, input, textarea, select, .chip, .tier, .btn-project, .btn-new,
+.send, .voice-btn, .attach-btn, .artifact-btn {
+  accent-color: #bdbdbd !important;
+}
+.box, .box:focus-within {
+  border-color: #383838 !important;
+  background: #171717 !important;
+  box-shadow: none !important;
+  outline-color: #bdbdbd !important;
+}
+.box:focus-within { border-color: #a0a0a0 !important; }
+.send:not(:disabled), .login-box .btn-new, .artifact-btn.primary {
+  color: #111 !important;
+  border: 1px solid #dedede !important;
+  background: #dedede !important;
+  box-shadow: none !important;
+}
+.send:not(:disabled):hover, .login-box .btn-new:hover, .artifact-btn.primary:hover { background: #fff !important; }
+.chip:hover, .btn-project:hover, .btn-new:hover, .artifact-btn:hover {
+  border-color: #a8a8a8 !important; background-color: #242424 !important;
+}
+.tier:has(input:checked) { border-color: #aaa !important; background: #242424 !important; box-shadow: none !important; }
+.voice-btn[data-state="listening"], .voice-btn[data-state="speaking"] {
+  color: #eee !important; border-color: #777 !important; background: #242424 !important; animation: none !important;
+}
+.login { background: #101010 !important; }
+.login-box { background: #171717 !important; border: 1px solid #3a3a3a !important; backdrop-filter: none !important; }
+
+/* O texto de atividade fica solto na conversa: nenhum card, faixa ou fundo colorido. */
+.work-status, .work-status.is-running {
+  display: block !important; width: fit-content; max-width: min(100%, 680px);
+  margin: 4px 0 14px !important; padding: 0 !important;
+  border: 0 !important; border-radius: 0 !important;
+  background: transparent !important; background-image: none !important;
+  box-shadow: none !important; overflow: visible !important;
+}
+.work-status::before, .work-status::after, .work-status.is-running::before, .work-status.is-running::after {
+  content: none !important; display: none !important;
+}
 .work-head { display: flex; align-items: center; gap: 10px; min-height: 24px; }
-.work-head .logo { width: 21px; height: 21px; filter: drop-shadow(0 0 8px rgba(129,140,248,.55)); }
-.work-current { font-size: 13px; font-weight: 650; letter-spacing: -.01em; color: transparent !important; background: linear-gradient(100deg,#a5b4fc 0%,#f0abfc 25%,#67e8f9 48%,#c4b5fd 70%,#a5b4fc 100%); background-size: 260% 100%; background-clip: text; -webkit-background-clip: text; animation: siart-gradient-flow 2.1s linear infinite; }
-.work-current.rise-in { animation: siart-gradient-flow 2.1s linear infinite, rise-text .34s cubic-bezier(.2,.8,.2,1); }
-.activity { display: flex !important; margin: 10px 0 0 30px; padding: 0; gap: 7px; }
-.activity li { display: flex; align-items: center; gap: 8px; min-height: 22px; font-size: 12px; color: var(--text-2); }
-.activity .st { min-width: 88px; text-align: center; font-size: 10px; line-height: 18px; }
-.activity .st.running { color: #a5b4fc; border-color: rgba(165,180,252,.5); background: rgba(99,102,241,.12); }
-.activity .st.done { color: #86efac; border-color: rgba(134,239,172,.35); background: rgba(34,197,94,.08); }
-.activity .st.failed { color: #fca5a5; border-color: rgba(252,165,165,.4); background: rgba(239,68,68,.08); }
-.activity code { color: var(--text-2); overflow-wrap: anywhere; }
-@keyframes siart-gradient-flow { from { background-position: 100% 50%; } to { background-position: -160% 50%; } }
-.box:focus-within { border-color: rgba(165,180,252,.7) !important; box-shadow: 0 0 0 3px rgba(129,140,248,.12) !important; }
-.send:not(:disabled) { background: linear-gradient(135deg,#c7d2fe,#a5f3fc); color: #171725; }
-.chip:hover, .btn-project:hover { border-color: rgba(165,180,252,.6); }
-.login { background: radial-gradient(ellipse at 15% 15%,rgba(99,102,241,.22),transparent 42%),radial-gradient(ellipse at 85% 80%,rgba(34,211,238,.14),transparent 40%),var(--bg) !important; }
-.login-box { padding: 30px; border: 1px solid rgba(165,180,252,.2); border-radius: 22px; background: rgba(24,24,30,.82); backdrop-filter: blur(24px); }
-.login-box .logo { filter: drop-shadow(0 0 20px rgba(129,140,248,.45)); }
-.login-box .btn-new { background: linear-gradient(135deg,#c7d2fe,#a5f3fc); color: #171725; }
-@media (prefers-reduced-motion: reduce) { .work-current,.work-current.rise-in { animation: none !important; color: #c7d2fe !important; } }
+.work-head .logo { width: 20px; height: 20px; filter: grayscale(1) !important; }
+.work-current, .work-current.rise-in {
+  display: inline-block; color: transparent !important;
+  background: linear-gradient(100deg,#666 0%,#aaa 24%,#fff 50%,#aaa 76%,#666 100%) !important;
+  background-size: 240% 100% !important; background-clip: text !important;
+  -webkit-background-clip: text !important;
+  font-size: 13px; font-weight: 600; letter-spacing: -.015em;
+  animation: siart-monochrome-flow 2.6s linear infinite !important;
+}
+@keyframes siart-monochrome-flow { from { background-position: 100% 50%; } to { background-position: -140% 50%; } }
+.activity { display: flex !important; flex-direction: column; gap: 7px; margin: 10px 0 0 30px !important; padding: 0 !important; list-style: none; }
+.activity li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; min-height: 20px; color: #aaa !important; font-size: 12px; }
+.activity .st, .activity .st.running, .activity .st.done, .activity .st.failed {
+  min-width: 84px; padding: 0 !important; border: 0 !important; border-radius: 0 !important;
+  color: #d0d0d0 !important; background: transparent !important; text-align: left; font-size: 10px;
+}
+.activity code { color: #888 !important; overflow-wrap: anywhere; }
+
+/* Cartões de arquivos: neutros, com ações reais de download e prévia. */
+.artifact-card {
+  background: #171717 !important; border: 1px solid #393939 !important;
+  border-radius: 12px; box-shadow: none !important;
+}
+.artifact-icon { color: #eee !important; background: #303030 !important; }
+.artifact-btn { color: #ddd !important; background: #202020 !important; border-color: #454545 !important; }
+.artifact-btn.primary { color: #111 !important; background: #ddd !important; }
+.artifact-info span, .meta, .fb { color: #999 !important; }
+
+/* Elementos auxiliares e estados também permanecem em escala de cinza. */
+.fb { border-left-color: #777 !important; }
+.msg.assistant .bubble a { color: #ddd !important; }
+.msg.assistant .bubble blockquote { border-left-color: #888 !important; }
+::selection { color: #111; background: #ddd; }
+:focus-visible { outline: 2px solid #aaa !important; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .work-current, .work-current.rise-in, .moon-spin, .msg.assistant { animation: none !important; }
+  .work-current, .work-current.rise-in { color: #ddd !important; background: none !important; }
+}
+
+/* Remove o halo azul antigo da tela inicial e normaliza estados. */
+.empty .logo-wrap::before { background: none !important; animation: none !important; }
+.empty .logo-wrap .logo { filter: grayscale(1) !important; }
+.err, .stopped, .notice, .banner { border-color: #555 !important; color: #ccc !important; }
