@@ -461,3 +461,82 @@ button, a, input, textarea, select, .chip, .tier, .btn-project, .btn-new,
 .work-current.is-done { color: #d9d9d9 !important; background: none !important; -webkit-text-fill-color: currentColor; animation: none !important; }
 @keyframes siart-action-pulse { 0%,100% { opacity:.5; transform:rotate(0deg); } 50% { opacity:1; transform:rotate(180deg); } }
 @media (prefers-reduced-motion: reduce) { .activity .st.running, .activity-label.is-running { animation:none !important; } }
+
+
+/* Siart 1.3.4 — interface conversacional inspirada na simplicidade do Le Chat,
+   mantendo marca, paleta e componentes próprios da Siart. */
+:root {
+  --bg: #101010; --bg-2: #171717; --surface: #1d1d1d;
+  --text: #f2f2f2; --text-2: #999; --border: #303030;
+  --accent: #c7c7c7; --side: 264px;
+}
+body { background: #101010; letter-spacing: -.012em; }
+#sidebar { background: #151515; border-right-color: #292929; padding: 20px 14px calc(14px + env(safe-area-inset-bottom)); gap: 14px; }
+.brand { padding: 6px 10px 12px; font-size: 16px; letter-spacing: -.025em; }
+.brand .logo { filter: grayscale(1); }
+.btn-new { min-height: 42px; border-radius: 11px; background: #202020; border-color: #343434; font-size: 13px; font-weight: 550; }
+#chat-list { gap: 3px; }
+.chat-item { border-radius: 9px; }
+.chat-open { min-height: 39px; font-size: 13px; }
+.chat-item.active { background: #242424; }
+.side-note { font-size: 11px; color: #777; }
+.topbar { min-height: 58px; padding: 7px 18px; border-bottom-color: #292929; background: rgba(16,16,16,.94); }
+.topbar h1 { font-size: 13px; color: #aaa; font-weight: 500; }
+#messages { padding: 30px 22px; }
+.col { max-width: 790px; }
+.msg { margin-bottom: 30px; }
+.msg.user .bubble { border-radius: 17px; background: #222; border-color: #303030; padding: 11px 16px; }
+.msg.assistant .bubble { font-size: 15px; line-height: 1.72; }
+.msg.assistant .bubble h4 { font-size: 16px; margin-top: 22px; }
+.msg.assistant .bubble p { margin-bottom: 14px; }
+#composer { padding: 10px 22px calc(16px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, #101010 22%); }
+.box { max-width: 790px; min-height: 62px; align-items: flex-end; gap: 10px; padding: 9px 10px 9px 13px; border-radius: 21px; background: #1b1b1b; border-color: #393939; box-shadow: 0 8px 30px rgba(0,0,0,.16); }
+.box:focus-within { border-color: #666; }
+#input { min-height: 38px; padding: 8px 2px; font-size: 15px; }
+#input::placeholder { color: #858585; }
+.send { width: 42px; height: 42px; border-radius: 50%; background: #ededed; color: #151515; }
+.send.stop { border-radius: 50%; background: #292929; border-color: #4a4a4a; color: #eee; }
+.attach-btn, .voice-btn { border-radius: 50%; }
+.hint { font-size: 11px; color: #777; }
+.model-picker { max-width: 790px; margin: 0 auto 8px; }
+.model-toggle { border: 0; background: transparent; color: #999; font-size: 12px; padding: 5px 2px; }
+.model-toggle:hover { color: #eee; }
+.work-status { margin: 2px 0 18px !important; }
+.work-head { min-height: 25px; }
+.work-current, .work-current.rise-in {
+  color: transparent !important; -webkit-text-fill-color: transparent !important;
+  background-image: linear-gradient(100deg,#777 0%,#aaa 28%,#fff 50%,#aaa 72%,#777 100%) !important;
+  background-size: 320% 100% !important; background-position: 100% 50%;
+  background-clip: text !important; -webkit-background-clip: text !important;
+  animation: siart-monochrome-flow 1.65s linear infinite !important;
+  will-change: background-position;
+}
+.activity { margin: 10px 0 0 29px !important; gap: 9px !important; }
+.activity li { font-size: 12px; }
+.activity-label.is-running {
+  color: transparent !important; -webkit-text-fill-color: transparent !important;
+  background-image: linear-gradient(100deg,#777 0%,#aaa 28%,#fff 50%,#aaa 72%,#777 100%);
+  background-size: 320% 100%; background-clip: text; -webkit-background-clip: text;
+  animation: siart-monochrome-flow 1.65s linear infinite !important;
+}
+@keyframes siart-monochrome-flow { 0% { background-position: 100% 50%; } 100% { background-position: -220% 50%; } }
+.work-current.is-done { color: #ddd !important; -webkit-text-fill-color: #ddd !important; background: none !important; animation: none !important; }
+.fb { margin: 10px 0; padding: 8px 11px; border-left: 2px solid #555 !important; color: #999 !important; font-size: 12px; }
+.err { border-color: #554040 !important; color: #e0a2a2 !important; background: #1b1515; }
+.artifact-card { padding: 14px; border-radius: 14px; }
+.artifact-actions { gap: 8px; }
+.artifact-btn { min-height: 38px; border-radius: 9px; }
+@media (min-width: 860px) {
+  #sidebar { width: 264px; }
+  #messages { padding: 38px 30px; }
+}
+@media (max-width: 859px) {
+  #messages { padding: 24px 18px; }
+  #composer { padding-left: 14px; padding-right: 14px; }
+  .topbar { padding-left: 12px; padding-right: 12px; }
+}
+/* O gradiente de atividade é uma solicitação explícita do usuário; não o desativar
+   por prefers-reduced-motion. Os demais movimentos continuam respeitando a preferência. */
+@media (prefers-reduced-motion: reduce) {
+  .work-current, .work-current.rise-in, .activity-label.is-running { animation: siart-monochrome-flow 3.5s linear infinite !important; }
+}

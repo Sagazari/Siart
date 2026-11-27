@@ -17,19 +17,19 @@ const TIER_DEFS = {
     name: 'Absoluty GTI', version: '1.2',
     description: 'Absoluty Grand Technical Intelligence: nível de maior capacidade, com raciocínio alto e ferramentas para tarefas técnicas e complexas.',
     chain: 'mistral:mistral-large-latest,gemini:gemini-2.5-pro,groq:openai/gpt-oss-120b,openrouter:nvidia/nemotron-3-ultra-550b-a55b:free,sambanova:gpt-oss-120b',
-    temperature: 0.3, maxTokens: 8192, effort: 'high', tools: true, firstByteMs: 60_000,
+    temperature: 0.3, maxTokens: 8192, effort: 'high', tools: true, firstByteMs: 25_000,
   },
   moyenne: {
     name: 'Moyenne', version: '1',
     description: 'Equilíbrio entre qualidade e velocidade para o dia a dia.',
     chain: 'groq:openai/gpt-oss-120b,gemini:gemini-2.5-flash,mistral:mistral-medium-latest,openrouter:openai/gpt-oss-120b:free,sambanova:gpt-oss-120b',
-    temperature: 0.4, maxTokens: 4096, effort: 'medium', tools: true, firstByteMs: 40_000,
+    temperature: 0.4, maxTokens: 4096, effort: 'medium', tools: true, firstByteMs: 18_000,
   },
   basse: {
     name: 'Basse', version: '0.1',
     description: 'Rápida e simples: boa para conversa e dúvidas curtas, fraca em tarefas complexas. Não mexe nos arquivos do projeto.',
     chain: 'groq:openai/gpt-oss-20b,gemini:gemini-2.5-flash-lite,mistral:mistral-small-latest,openrouter:openai/gpt-oss-20b:free,sambanova:gemma-4-31B-it',
-    temperature: 0.6, maxTokens: 2048, effort: 'low', tools: false, firstByteMs: 20_000,
+    temperature: 0.6, maxTokens: 2048, effort: 'low', tools: false, firstByteMs: 12_000,
   },
 };
 

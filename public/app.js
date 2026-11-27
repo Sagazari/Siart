@@ -507,13 +507,22 @@
         } else if (event === 'tool.started') {
           reply.stage = TOOL_LABEL[data.tool] || 'Executando uma etapa da tarefa...';
           const actionLabel = ['write_project_file', 'read_project_file', 'apply_file_patch'].includes(data.tool) && data.path ? reply.stage + ' ' + data.path : reply.stage;
-          (reply.activities ||= []).push({ id: data.callId, label: actionLabel, detail: '', status: 'running' });
+          const actionKey = data.tool + '|' + (data.path || '');
+          (reply.activities ||= []);
+          let activity = reply.activities.find((a) => a.key === actionKey);
+          if (activity) {
+            activity.status = 'running'; activity.detail = '';
+            (activity.callIds ||= []).push(data.callId);
+          } else {
+            activity = { key: actionKey, id: data.callId, callIds: [data.callId], label: actionLabel, detail: '', status: 'running' };
+            reply.activities.push(activity);
+          }
           refreshLast(reply);
         } else if (event === 'tool.completed' || event === 'tool.failed') {
-          const activity = (reply.activities || []).find((a) => a.id === data.callId && a.status === 'running');
+          const activity = (reply.activities || []).find((a) => a.id === data.callId || (a.callIds || []).includes(data.callId));
           if (activity) { activity.status = event === 'tool.failed' ? 'failed' : 'done'; if (event === 'tool.failed') activity.detail = data.message || activity.detail; }
-          if (event === 'tool.failed') reply.stage = 'Reavaliando a etapa e preparando uma alternativa...';
-          else reply.stage = 'Integrando os resultados...';
+          const running = [...(reply.activities || [])].reverse().find((a) => a.status === 'running');
+          reply.stage = running ? running.label : (event === 'tool.failed' ? 'Ajustando a etapa que falhou...' : 'Conferindo os resultados...');
           if (event === 'tool.completed' && data.mutated && data.path && ['write_project_file', 'apply_file_patch', 'generate_pdf'].includes(data.tool)) {
             const ext = data.path.split('.').pop().toLowerCase();
             const kind = ext === 'pdf' ? 'pdf' : ['html', 'htm'].includes(ext) ? 'html' : 'file';
@@ -528,7 +537,7 @@
       });
     } catch (e) {
       if (e.name === 'AbortError') reply.stopped = true;
-      else reply.error = e.message || 'Falha de conexão.';
+      else reply.error = (e instanceof TypeError || /network|fetch failed|failed to fetch/i.test(e.message || '')) ? 'Falha de conexão com os provedores. Confira sua internet e tente novamente.' : (e.message || 'Falha de conexão.');
     } finally {
       reply.working = false;
       controller = null;
