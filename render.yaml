@@ -14,9 +14,9 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: MISTRAL_API_KEY
-        sync: false
       - key: OPENROUTER_API_KEY
+        sync: false
+      - key: SAMBANOVA_API_KEY
         sync: false
       - key: ACCESS_CODE
         sync: false          # recomendado: senha de acesso ao site

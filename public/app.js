@@ -28,6 +28,7 @@
   let state = load();
   let streaming = false;
   let controller = null;
+  const replyChatIds = new WeakMap();
   let voiceActive = false;
   let recognition = null;
   let voiceSpeaking = false;
@@ -215,6 +216,10 @@
     streamQueued = true;
     requestAnimationFrame(() => {
       streamQueued = false;
+      const chatId = replyChatIds.get(reply);
+      if (chatId && state.activeId !== chatId) return;
+      const chat = chatId ? state.chats.find((c) => c.id === chatId) : active();
+      if (!chat || chat.messages[chat.messages.length - 1] !== reply) return;
       const bubble = el.messages.querySelector('.msg:last-child .bubble');
       if (!bubble) return;
       const nearBottom = el.messages.scrollHeight - el.messages.scrollTop - el.messages.clientHeight < 90;
@@ -249,6 +254,8 @@
     if (next !== reply.stage) { reply.stage = next; refreshLast(reply); return; }
     const secs = elapsedSeconds(reply);
     if (secs < 5) return;
+    const chatId = replyChatIds.get(reply);
+    if (chatId && state.activeId !== chatId) { if (Math.floor(secs) % 5 === 0) renderList(); return; }
     const node = el.messages.querySelector('.msg:last-child .work-time');
     if (node) node.textContent = formatElapsed(secs); else refreshLast(reply);
   }
@@ -284,13 +291,19 @@
       row.className = 'chat-item' + (c.id === state.activeId ? ' active' : '') + (seenChats.has(c.id) ? '' : ' enter');
       seenChats.add(c.id);
       const open = document.createElement('button');
-      open.type = 'button'; open.className = 'chat-open'; open.textContent = c.title;
-      open.addEventListener('click', () => { if (!streaming) { state.activeId = c.id; save(); renderAll(); closeSidebar(); } });
+      open.type = 'button'; open.className = 'chat-open';
+      const title = document.createElement('span'); title.className = 'chat-title'; title.textContent = c.title; open.append(title);
+      const isWorking = c.messages.some((m) => m.role === 'assistant' && m.working);
+      if (isWorking && c.id !== state.activeId) {
+        const status = document.createElement('span'); status.className = 'chat-background-status';
+        status.innerHTML = '<span class="chat-background-dot"></span>Respondendo em segundo plano'; open.append(status);
+      }
+      open.addEventListener('click', () => { state.activeId = c.id; save(); renderAll(); closeSidebar(); });
       const del = document.createElement('button');
       del.type = 'button'; del.className = 'chat-del'; del.setAttribute('aria-label', 'Excluir conversa: ' + c.title);
       del.innerHTML = '<svg class="ico"><use href="#i-trash"/></svg>';
       del.addEventListener('click', () => {
-        if (streaming || !confirm('Excluir esta conversa? Essa ação não pode ser desfeita.')) return;
+        if (isWorking || !confirm('Excluir esta conversa? Essa ação não pode ser desfeita.')) return;
         state.chats = state.chats.filter((x) => x.id !== c.id);
         if (state.activeId === c.id) state.activeId = null;
         save(); renderAll();
@@ -412,7 +425,7 @@
         chips.append(b);
       });
     } else {
-      chat.messages.forEach((m, i) => col.append(messageNode(m, streaming && i === chat.messages.length - 1, i >= animateFrom)));
+      chat.messages.forEach((m, i) => col.append(messageNode(m, m.role === 'assistant' && !!m.working, i >= animateFrom)));
     }
     el.messages.append(col);
     if (Number.isFinite(animateFrom)) el.messages.scrollTo({ top: el.messages.scrollHeight, behavior: 'smooth' });
@@ -463,7 +476,7 @@
   // ---------- Níveis de IA ----------
   function showTierHint() {
     const t = tiers.find((x) => x.id === tierId);
-    ui.tierHint.textContent = t ? t.description + (t.providers.length ? ' Provedores: ' + t.providers.join(', ') + '.' : '') : '';
+    ui.tierHint.textContent = t ? t.description : '';
   }
   function selectTier(id) {
     tierId = id;
@@ -508,9 +521,14 @@
   }
 
   function refreshLast(reply) {
+    const chatId = replyChatIds.get(reply);
+    if (chatId && state.activeId !== chatId) { renderList(); return; }
+    const chat = chatId ? state.chats.find((c) => c.id === chatId) : active();
+    if (!chat || chat.messages[chat.messages.length - 1] !== reply) return;
     const last = el.messages.querySelector('.msg:last-child');
-    if (last) last.replaceWith(messageNode(reply, true));
-    el.messages.scrollTop = el.messages.scrollHeight;
+    if (last) last.replaceWith(messageNode(reply, !!reply.working));
+    else renderMessages();
+    if (state.activeId === chat.id) el.messages.scrollTop = el.messages.scrollHeight;
   }
 
   // ---------- Envio e streaming (SSE via fetch) ----------
@@ -618,6 +636,7 @@
     chat.messages.push({ role: 'user', content: text + extraText, attachments: attachmentCopy.map((a) => ({ name: a.name, type: a.type, dataUrl: a.dataUrl || null })) });
     if (chat.messages.length === 1) chat.title = subjectTitle(text, attachmentCopy[0]?.name || '');
     const reply = { role: 'assistant', content: '', working: true, stage: initialWorkStage() };
+    replyChatIds.set(reply, chat.id);
     chat.messages.push(reply);
     chat.updatedAt = Date.now();
     save();
@@ -943,7 +962,6 @@
     sendMessage(text, files);
   });
   el.newChat.addEventListener('click', () => {
-    if (streaming) return;
     state.activeId = null;
     save(); renderAll(); closeSidebar(); el.input.focus();
   });
@@ -1016,7 +1034,7 @@
       renderTiers(s.defaultTier);
       updateLimits();
       el.banner.hidden = !!s.ready;
-      if (!s.ready) el.banner.textContent = 'Nenhuma chave de IA configurada no servidor (GROQ_API_KEY, GEMINI_API_KEY, MISTRAL_API_KEY ou OPENROUTER_API_KEY). O chat não vai responder até haver ao menos uma.';
+      if (!s.ready) el.banner.textContent = 'Nenhuma chave de IA configurada no servidor (GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY ou SAMBANOVA_API_KEY). O chat não vai responder até haver ao menos uma.';
     }).catch(() => {
       el.banner.textContent = 'Não foi possível contatar o servidor da Siart.'; el.banner.hidden = false;
     });

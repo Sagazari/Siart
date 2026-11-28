@@ -104,7 +104,11 @@ a { color: var(--accent-hover); text-underline-offset: 3px; }
 #chat-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
 .chat-item { display: flex; align-items: center; border-radius: var(--r-sm); transition: background-color .15s ease; }
 .chat-item:hover, .chat-item.active { background: var(--surface); }
-.chat-open { flex: 1; min-width: 0; min-height: 40px; padding: 0 10px; text-align: left; background: none; border: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 13.5px; }
+.chat-open { flex: 1; min-width: 0; min-height: 40px; padding: 5px 10px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; text-align: left; background: none; border: 0; overflow: hidden; color: var(--text-2); font-size: 13.5px; }
+.chat-title { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-background-status { display: inline-flex; align-items: center; gap: 5px; color: var(--text-3); font-size: 10.5px; line-height: 1.2; }
+.chat-background-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--accent, #16a085); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #16a085) 13%, transparent); animation: chat-bg-pulse 1.6s ease-in-out infinite; }
+@keyframes chat-bg-pulse { 50% { opacity: .45; } }
 .chat-item.active .chat-open { color: var(--text); }
 .chat-del { width: 40px; height: 40px; display: grid; place-items: center; background: none; border: 0; color: var(--text-3); border-radius: var(--r-sm); opacity: 0; transition: opacity .15s ease, color .15s ease; }
 .chat-item:hover .chat-del, .chat-del:focus-visible { opacity: 1; }

@@ -63,14 +63,15 @@ test('níveis têm nomes, versões e cadeias padrão; TIER_* sobrescreve; dispon
   assert.deepEqual(Object.values(tiers).map((t) => t.label), ['Absoluty GTI 1.2', 'Moyenne 1', 'Basse 0.1']);
   assert.equal(tiers.basse.tools, false);
   assert.equal(tiers.absoluty.tools, true);
-  assert.ok(Object.values(tiers).every((t) => new Set(t.chain.map((c) => c.provider)).size === 5));
-  const custom = buildTiers({ TIER_BASSE: 'mistral:mistral-small-latest', TIER_BASSE_TOOLS: '1', TIER_MOYENNE_FIRST_BYTE_MS: '500' });
-  assert.deepEqual(custom.basse.chain, [{ provider: 'mistral', model: 'mistral-small-latest' }]);
+  assert.ok(Object.values(tiers).every((t) => new Set(t.chain.map((c) => c.provider)).size === 4));
+  const custom = buildTiers({ TIER_BASSE: 'sambanova:gpt-oss-120b', TIER_BASSE_TOOLS: '1', TIER_MOYENNE_FIRST_BYTE_MS: '500' });
+  assert.deepEqual(custom.basse.chain, [{ provider: 'sambanova', model: 'gpt-oss-120b' }]);
   assert.equal(custom.basse.tools, true);
   assert.equal(custom.moyenne.firstByteMs, 500);
   assert.deepEqual(buildTiers({ TIER_BASSE: 'lixo' }).basse.chain, buildTiers({}).basse.chain); // cadeia inválida volta ao padrão
 
   const only = buildProviders({ GEMINI_API_KEY: 'g' });
+  assert.equal(Object.hasOwn(only, 'mistral'), false);
   assert.equal(tierAvailable(tiers.moyenne, only), true);
   assert.equal(tierAvailable(custom.basse, only), false);
   assert.equal(buildProviders({ GOOGLE_API_KEY: 'g' }).gemini.apiKey, 'g');
@@ -78,7 +79,7 @@ test('níveis têm nomes, versões e cadeias padrão; TIER_* sobrescreve; dispon
 });
 
 test('/api/status lista níveis, provedores configurados (sem chaves) e limites', async () => {
-  const { server, port } = await startApp({ GROQ_API_KEY: 'gsk_secreta', MISTRAL_API_KEY: 'mk_secreta', MAX_CONVERSATIONS: '12', MAX_MESSAGES_PER_CONVERSATION: '10' });
+  const { server, port } = await startApp({ GROQ_API_KEY: 'gsk_secreta', MAX_CONVERSATIONS: '12', MAX_MESSAGES_PER_CONVERSATION: '10' });
   try {
     const raw = await (await fetch(`http://127.0.0.1:${port}/api/status`)).text();
     assert.ok(!raw.includes('secreta'));
@@ -87,7 +88,7 @@ test('/api/status lista níveis, provedores configurados (sem chaves) e limites'
     assert.equal(st.defaultTier, 'moyenne');
     assert.deepEqual(st.limits, { maxConversations: 12, maxMessages: 10 });
     assert.deepEqual(st.tiers.map((t) => t.label), ['Absoluty GTI 1.2', 'Moyenne 1', 'Basse 0.1']);
-    assert.deepEqual(st.tiers.find((t) => t.id === 'moyenne').providers.sort(), ['Groq', 'Mistral']);
+    assert.deepEqual(st.tiers.find((t) => t.id === 'moyenne').providers.sort(), ['Groq']);
     assert.equal(st.tiers.find((t) => t.id === 'basse').tools, false);
   } finally { await close(server); }
   const none = await startApp({});
@@ -164,7 +165,7 @@ test('provedor que não responde a tempo é trocado; resposta vazia também', as
   const empty = await provider((b, q, res) => ok(res, []));
   const good = await provider((b, q, res) => ok(res, ['certo']));
   const { server, port } = await startApp({
-    GROQ_API_KEY: 'k', GROQ_BASE_URL: slow.url, GEMINI_API_KEY: 'g', GEMINI_BASE_URL: empty.url, MISTRAL_API_KEY: 'm', MISTRAL_BASE_URL: good.url,
+    GROQ_API_KEY: 'k', GROQ_BASE_URL: slow.url, GEMINI_API_KEY: 'g', GEMINI_BASE_URL: empty.url, SAMBANOVA_API_KEY: 'm', SAMBANOVA_BASE_URL: good.url,
     TIER_MOYENNE_FIRST_BYTE_MS: '300',
   });
   try {
@@ -212,14 +213,14 @@ test('quando todos falham, devolve all_providers_failed com os motivos e sem vaz
 test('404 de modelo pausa só aquele modelo; 400 sem ferramentas segue para o próximo', async () => {
   const groq = await provider(fail(404));
   const gem = await provider(fail(400));
-  const mis = await provider((b, q, res) => ok(res, ['via mistral']));
+  const mis = await provider((b, q, res) => ok(res, ['via sambanova']));
   const { server, port } = await startApp({
-    GROQ_API_KEY: 'k', GROQ_BASE_URL: groq.url, GEMINI_API_KEY: 'g', GEMINI_BASE_URL: gem.url, MISTRAL_API_KEY: 'm', MISTRAL_BASE_URL: mis.url,
+    GROQ_API_KEY: 'k', GROQ_BASE_URL: groq.url, GEMINI_API_KEY: 'g', GEMINI_BASE_URL: gem.url, SAMBANOVA_API_KEY: 'm', SAMBANOVA_BASE_URL: mis.url,
   });
   try {
     const ev = await events(await chat(port, { tier: 'basse' })); // basse não usa ferramentas
     assert.deepEqual(ev.filter((e) => e.event === 'model.fallback').map((e) => e.data.reason), ['model_unavailable', 'rejected']);
-    assert.equal(text(ev), 'via mistral');
+    assert.equal(text(ev), 'via sambanova');
   } finally { await close(server); await close(groq.server); await close(gem.server); await close(mis.server); }
 });
 

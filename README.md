@@ -21,9 +21,9 @@ npm test                    # 42 testes, sem rede externa
 
 Cada nível tem uma **cadeia de provedores** tentada na ordem. Padrões (IDs conferidos nas documentações em 24/11/2026):
 
-- **Absoluty:** Gemini `gemini-2.5-pro` → Mistral `mistral-large-latest` → Groq `openai/gpt-oss-120b` → OpenRouter `qwen/qwen3-coder:free`
-- **Moyenne:** Groq `openai/gpt-oss-120b` → Gemini `gemini-2.5-flash` → Mistral `mistral-medium-latest` → OpenRouter `openai/gpt-oss-120b:free`
-- **Basse:** Groq `openai/gpt-oss-20b` → Gemini `gemini-2.5-flash-lite` → Mistral `mistral-small-latest` → OpenRouter `openai/gpt-oss-20b:free`
+- **Absoluty:** Gemini `gemini-2.5-pro` → Groq `openai/gpt-oss-120b` → OpenRouter `qwen/qwen3-coder:free`
+- **Moyenne:** Groq `openai/gpt-oss-120b` → Gemini `gemini-2.5-flash` → OpenRouter `openai/gpt-oss-120b:free`
+- **Basse:** Groq `openai/gpt-oss-20b` → Gemini `gemini-2.5-flash-lite` → OpenRouter `openai/gpt-oss-20b:free`
 
 Só entram na cadeia os provedores com chave configurada. Com **apenas a chave da Groq**, os três níveis funcionam, mas Absoluty usa `gpt-oss-120b` com esforço alto, Moyenne a mesma com esforço médio e Basse usa `gpt-oss-20b`. Catálogos de modelos mudam rápido: ajuste com `TIER_ABSOLUTY`, `TIER_MOYENNE` e `TIER_BASSE` (formato `provedor:modelo,provedor:modelo`). Ao iniciar, o servidor avisa no log quando um modelo configurado não aparece na lista do provedor.
 
@@ -31,7 +31,7 @@ Só entram na cadeia os provedores com chave configurada. Com **apenas a chave d
 
 - Troca para o próximo provedor se o atual retornar erro (429, 5xx, 401/403, 402, 404, 400), não começar a responder no prazo (20 a 60 s conforme o nível), ou devolver resposta vazia. O usuário vê um aviso como "Gemini atingiu o limite de uso. Usando Mistral." e, em cada resposta, qual nível e provedor responderam.
 - **Só troca antes de a resposta começar.** Se a conexão cair no meio do texto, a resposta termina com erro, para não duplicar texto.
-- Provedor que falhou fica em pausa por um tempo (30 s para limite e instabilidade, 10 min para chave inválida ou sem créditos) e é pulado nas próximas mensagens. Se todos estiverem em pausa, tenta mesmo assim.
+- Provedor que falhou fica em pausa por um tempo (30 s para limite e instabilidade, 10 min para chave inválida ou sem créditos) e é pulado nas próximas mensagens. Se todos estiverem em pausa, tenta mesmo assim. Cada tarefa tem no máximo quatro rodadas de ferramentas; chamadas idênticas de alteração são ignoradas para impedir repetição infinita.
 - Se o provedor rejeitar o tool calling (400), a Siart refaz a chamada só com texto.
 - Se todos falharem: mensagem "Nenhum provedor de IA conseguiu responder agora", com os motivos de cada um, sem detalhes internos.
 - Os IDs das chamadas de ferramenta são gerados pelo servidor (9 caracteres alfanuméricos), então uma tarefa com ferramentas pode trocar de provedor no meio.
@@ -46,18 +46,18 @@ Só entram na cadeia os provedores com chave configurada. Com **apenas a chave d
 
 | Variável | Obrigatória | Padrão | Uso |
 |---|---|---|---|
-| `GROQ_API_KEY`, `GEMINI_API_KEY` (ou `GOOGLE_API_KEY`), `MISTRAL_API_KEY`, `OPENROUTER_API_KEY` | pelo menos uma | – | chaves secretas; nunca vão ao navegador nem aos logs |
+| `GROQ_API_KEY`, `GEMINI_API_KEY` (ou `GOOGLE_API_KEY`), `OPENROUTER_API_KEY`, `SAMBANOVA_API_KEY`, `SAMBANOVA_API_KEY` | pelo menos uma | – | chaves secretas; nunca vão ao navegador nem aos logs |
 | `ACCESS_CODE` | recomendada | – | senha do site. Sem ela, qualquer pessoa com o link usa suas cotas |
 | `DEFAULT_TIER` | não | `moyenne` | nível inicial |
 | `TIER_ABSOLUTY` / `TIER_MOYENNE` / `TIER_BASSE` | não | ver acima | cadeia de modelos do nível |
 | `TIER_<NÍVEL>_TOOLS`, `TIER_<NÍVEL>_FIRST_BYTE_MS` | não | por nível | liga/desliga ferramentas; prazo até o primeiro byte |
 | `MAX_CONVERSATIONS`, `MAX_MESSAGES_PER_CONVERSATION` | não | `30`, `40` | limites acima |
-| `GROQ_BASE_URL`, `GEMINI_BASE_URL`, `MISTRAL_BASE_URL`, `OPENROUTER_BASE_URL` | não | URLs oficiais | só para testes ou proxies |
+| `GROQ_BASE_URL`, `GEMINI_BASE_URL`, `OPENROUTER_BASE_URL`, `SAMBANOVA_BASE_URL` | não | URLs oficiais | só para testes ou proxies |
 | `DATA_DIR` | não | `./data` | onde ficam os arquivos dos projetos |
 | `PORT` | não | `3000` | o Render define sozinho |
 | `TRUST_PROXY` | não | desligado | `1` no Render, para o rate limit enxergar o IP real e o cookie sair `Secure` |
 | `TOOLS_ENABLED` | não | ligado | `0` desliga as ferramentas (só chat) |
-| `MAX_TOOL_STEPS` | não | `6` | passos de ferramentas por mensagem |
+| `MAX_TOOL_STEPS` | não | `4` (máximo rígido) | rodadas de ferramentas por mensagem |
 | `RETENTION_DAYS` | não | `30` | apaga projetos sem uso após N dias |
 | `ALLOWED_ORIGIN` | não | – | só se o frontend ficar em outro domínio |
 | `RATE_LIMIT_MAX` / `API_RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | não | `20` / `240` / `60000` | chat e demais rotas, por IP |
@@ -69,7 +69,7 @@ A variável `GROQ_MODEL` da versão anterior não existe mais: use `TIER_*`.
 
 1. Suba esta pasta para um repositório no GitHub (o `.gitignore` já exclui `.env` e `data/`).
 2. No Render: **New → Blueprint** apontando para o repositório (usa o `render.yaml`), ou crie um **Web Service** com Build `npm install`, Start `npm start`, Health Check `/health`.
-3. Em **Environment**, preencha ao menos uma chave de IA (`GROQ_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY` ou `OPENROUTER_API_KEY`) e o `ACCESS_CODE`.
+3. Em **Environment**, preencha ao menos uma chave de IA (`GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY` ou `SAMBANOVA_API_KEY`) e o `ACCESS_CODE`.
 4. Abra a URL. Se aparecer o aviso vermelho sobre chaves, nenhuma chave foi lida.
 
 **Atenção ao plano gratuito:** o disco local é apagado a cada reinício e deploy, então os arquivos dos projetos somem. Para persistir, use um plano pago com disco (veja o bloco comentado no `render.yaml`). O serviço gratuito também hiberna sem uso.
@@ -92,14 +92,13 @@ A variável `GROQ_MODEL` da versão anterior não existe mais: use `TIER_*`.
 - **Anexos limitados:** imagens são redimensionadas e enviadas para análise via Gemini; arquivos de texto/código suportados podem ser anexados. ZIP, PDF e documentos Office não são interpretados nesta versão.
 - **Sem banco de dados:** o histórico de conversas fica só no navegador.
 - **Rate limit em memória:** vale para uma instância só.
-- Não foi testado com Groq, Gemini, Mistral ou OpenRouter reais nem em navegador real neste ambiente; os testes usam provedores simulados. Gemini e OpenRouter podem diferir em detalhes do streaming de tool calls; se algum falhar, o log mostra `provider_failed` e a Siart passa ao próximo.
+- Não foi testado com Groq, Gemini, SambaNova ou OpenRouter reais nem em navegador real neste ambiente; os testes usam provedores simulados. Gemini e OpenRouter podem diferir em detalhes do streaming de tool calls; se algum falhar, o log mostra `provider_failed` e a Siart passa ao próximo.
 - Gemini 2.5 Pro e outros modelos podem exigir faturamento ativo na conta; sem ele, o provedor retorna 429 ou 403 e a Siart troca.
 
 
 ## Diagnóstico de provedores
 
 - OpenRouter: a cadeia padrão usa `nvidia/nemotron-3-ultra-550b-a55b:free` (ID completo do modelo gratuito). Se você definiu `TIER_ABSOLUTY`, `TIER_MOYENNE` ou `TIER_BASSE` no Render, essa variável substitui a cadeia padrão; atualize/remova IDs antigos nela.
-- Mistral: use `MISTRAL_API_KEY` válida. A conta precisa ter acesso ativo à API e faturamento habilitado no Mistral Studio; uma chave criada sem acesso/billing pode retornar 401/402.
 - OpenRouter: use `OPENROUTER_API_KEY` válida. Modelos gratuitos têm limites próprios de requisições e podem ficar temporariamente indisponíveis.
 - Para conferir o motivo exato de uma falha, abra **Render → serviço Siart → Logs** e procure `provider_failed`; o log inclui provedor, modelo, status HTTP e mensagem retornada pelo gateway, sem registrar a chave secreta.
 

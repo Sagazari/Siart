@@ -212,11 +212,13 @@ async function runAgent({ cfg, tier, messages, userInstructions = '', voice = fa
     const p = cfg.providers[c.provider];
     const body = { model: c.model, stream: true, temperature: tier.temperature, [p.tokenParam]: tier.maxTokens, messages: history };
     if (tier.effort && supportsEffort(c.provider, c.model)) body.reasoning_effort = tier.effort;
-    if (withTools) { body.tools = TOOLS; body.tool_choice = 'auto'; }
+    if (withTools) { body.tools = TOOLS; body.tool_choice = 'auto'; body.parallel_tool_calls = false; }
     return body;
   };
 
   let steps = 0;
+  // Impede que modelos agentivos repitam indefinidamente a mesma mutação no projeto.
+  const completedMutations = new Set();
   let emitted = false;
   let siteDirty = false;
   let siteReviewed = false;
@@ -267,6 +269,7 @@ async function runAgent({ cfg, tier, messages, userInstructions = '', voice = fa
       content: result.text || '',
       tool_calls: result.calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.args || '{}' } })),
     });
+    let duplicateMutationCalls = 0;
     for (const [n, c] of result.calls.entries()) {
       if (n >= 8) { // toda chamada precisa de uma resposta, mesmo acima do limite
         history.push({ role: 'tool', tool_call_id: c.id, name: c.name, content: JSON.stringify({ ok: false, error: 'Limite de 8 chamadas por passo.' }) });
@@ -276,6 +279,14 @@ async function runAgent({ cfg, tier, messages, userInstructions = '', voice = fa
       let parseError = null;
       try { args = c.args ? JSON.parse(c.args) : {}; } catch { parseError = c.args && c.args.length > 6000 ? 'Os argumentos foram cortados pelo limite de tamanho. Divida o conteúdo em arquivos menores (até cerca de 250 linhas cada) e tente de novo.' : 'Os argumentos não são um JSON válido.'; }
       const info = { callId: c.id, tool: c.name, path: typeof args.path === 'string' ? args.path : (typeof args.from === 'string' ? args.from : undefined) };
+      const mutationKey = MUTATING.has(c.name) ? JSON.stringify([c.name, args]) : '';
+      if (mutationKey && completedMutations.has(mutationKey)) {
+        duplicateMutationCalls++;
+        const duplicate = { ok: true, skipped: true, message: 'Esta mesma alteração já foi executada nesta tarefa; não foi repetida.' };
+        send('tool.completed', { ...info, mutated: false, skipped: true });
+        history.push({ role: 'tool', tool_call_id: c.id, name: c.name, content: JSON.stringify(duplicate) });
+        continue;
+      }
       send('tool.started', info);
       const t0 = Date.now();
       let out;
@@ -286,11 +297,18 @@ async function runAgent({ cfg, tier, messages, userInstructions = '', voice = fa
         out = { ok: false, error: 'Falha interna ao executar a ferramenta.' };
       }
       log({ event: 'tool', taskId, tool: c.name, ok: out.ok, ms: Date.now() - t0 });
+      if (out.ok && mutationKey) completedMutations.add(mutationKey);
       if (out.ok && MUTATING.has(c.name) && typeof info.path === 'string' && /\.(?:html?|css|m?js)$/i.test(info.path)) { siteDirty = true; siteReviewed = false; }
       if (out.ok && c.name === 'review_website' && out.review) siteReviewed = out.review.ok && out.review.issues.length === 0;
       if (out.ok) send('tool.completed', { ...info, mutated: MUTATING.has(c.name) });
       else send('tool.failed', { ...info, message: out.error });
       history.push({ role: 'tool', tool_call_id: c.id, name: c.name, content: JSON.stringify(out) });
+    }
+    // Se o modelo só repetiu mutações idênticas, encerra o modo agente e pede uma resposta final.
+    if (result.calls.length > 0 && duplicateMutationCalls === result.calls.length) {
+      steps = cfg.maxToolSteps;
+      state.syncPrompt(false);
+      history.push({ role: 'user', content: 'As mesmas alterações já foram executadas. Não chame ferramentas novamente; confira o histórico e informe o resultado final.' });
     }
     if (emitted) send('message.delta', { text: '\n\n' });
   }

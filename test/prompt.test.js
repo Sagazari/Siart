@@ -37,8 +37,8 @@ test('identidade: nome Siart, criada pela Velroc, fundada por Sagaz e Knx', () =
 test('roteiro de sites profissionais está presente e limita o tamanho por arquivo', () => {
   const p = buildSystemPrompt({ tools: true, site: true });
   assert.match(p, /# Roteiro para sites e landing pages/);
-  assert.match(p, /VISUAL DE PRODUTO/);
-  assert.match(p, /250 a 300 linhas/);
+  assert.match(p, /visual de produto/i);
+  assert.match(p, /MESMO lote de chamadas/);
   assert.match(p, /Nunca escreva marcações como <tool_call>/);
 });
 
@@ -46,5 +46,6 @@ test('fora de pedidos de site o prompt fica enxuto (sem o roteiro longo)', () =>
   const lean = buildSystemPrompt({ tools: true });
   const full = buildSystemPrompt({ tools: true, site: true });
   assert.doesNotMatch(lean, /Roteiro para sites/);
-  assert.ok(full.length - lean.length > 8000);
+  assert.ok(full.length - lean.length > 1000);
+  assert.ok(full.length < lean.length + 7000);
 });

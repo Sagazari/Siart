@@ -36,7 +36,7 @@ function loadConfig(env = process.env) {
     apiRateMax: num(env.API_RATE_LIMIT_MAX, 240),
     timeoutMs: num(env.UPSTREAM_TIMEOUT_MS, 180_000),
     toolsEnabled: env.TOOLS_ENABLED !== '0',
-    maxToolSteps: num(env.MAX_TOOL_STEPS, 6),
+    maxToolSteps: Math.min(num(env.MAX_TOOL_STEPS, 4), 4),
     dataDir: path.resolve(env.DATA_DIR || path.join(process.cwd(), 'data')),
     accessCode: env.ACCESS_CODE || '',
     retentionDays: num(env.RETENTION_DAYS, 30),
@@ -394,7 +394,7 @@ if (require.main === module) {
   server.listen(cfg.port, '0.0.0.0', () => {
     const configured = Object.values(cfg.providers).filter((p) => p.apiKey).map((p) => p.id);
     log({ event: 'listening', port: cfg.port, providers: configured, tools: cfg.toolsEnabled, locked: Boolean(cfg.accessCode), dataDir: cfg.dataDir });
-    if (!configured.length) log({ level: 'warn', event: 'no_providers', message: 'Nenhuma chave de API definida (GROQ_API_KEY, GEMINI_API_KEY, MISTRAL_API_KEY ou OPENROUTER_API_KEY); o chat responderá 503.' });
+    if (!configured.length) log({ level: 'warn', event: 'no_providers', message: 'Nenhuma chave de API definida (GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY ou SAMBANOVA_API_KEY); o chat responderá 503.' });
     if (!cfg.accessCode) log({ level: 'warn', event: 'no_access_code', message: 'ACCESS_CODE não definido: qualquer pessoa com o link pode usar o chat e gastar sua cota da Groq.' });
     checkModels(cfg);
     purge();
