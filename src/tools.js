@@ -81,8 +81,8 @@ function runTool(ws, name, args) {
   }
 }
 
-function buildSystemPrompt({ tools, voice = false } = {}) {
-  return promptBuilder({ tools, voice, editable: [...EDITABLE] });
+function buildSystemPrompt({ tools, voice = false, site = false } = {}) {
+  return promptBuilder({ tools, voice, site, editable: [...EDITABLE] });
 }
 
 module.exports = { TOOLS, MUTATING, runTool, buildSystemPrompt };

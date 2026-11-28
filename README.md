@@ -145,3 +145,15 @@ Não há pesquisa web integrada ao agente, conectores externos/MCP, automação 
 - **Prompt do agente** (`src/prompt.js`): módulos de identidade, honestidade, comunicação, método de engenharia, segurança, ofício de interfaces, protocolo de ferramentas e modo voz.
 
 **Limite honesto da voz:** a qualidade depende das vozes instaladas no aparelho. Sem uma voz neural (Edge) ou do Google (Chrome), o navegador usa uma voz mais robótica. Uma voz neural independente do aparelho exigiria um serviço de TTS no servidor.
+
+## Siart AI 1.6.0
+
+- **Sem logs de provedor na interface:** os avisos "X não funcionou. Usando outra IA" e a linha "via Groq" foram removidos. A troca de provedor continua automática e fica só no log do servidor. A mensagem de falha total agora é simples.
+- **Mensagem de carregamento:** etapas reais (Analisando → Organizando → Elaborando → Escrevendo), tempo decorrido após 5 s, aviso em esperas longas e, ao gravar arquivos, o nome e o tamanho já gerado em tempo real.
+- **Velocidade:** o texto agora sai ao vivo também nos níveis com ferramentas; limite de 2 cobranças de revisão (antes podia girar até o tempo total); limites de saída maiores (16384 / 8192 tokens) para arquivos grandes não serem cortados; o prompt longo de sites só é enviado quando o pedido envolve site ou interface.
+- **Chamadas de ferramenta escritas como texto** (`<tool_call>...`) são interceptadas, convertidas em chamadas reais e nunca aparecem na tela (`src/textcalls.js`).
+- **Caminhos ocultos de configuração** liberados: `.github/workflows/*.yml`, `.gitignore`, `.editorconfig`, `.nvmrc`, `.prettierrc`, `.dockerignore`, `.env.example`. `.env`, `.git` e `.history` continuam bloqueados.
+- **Cartões de arquivo** transparentes, com cor e ícone próprios por tipo (HTML, CSS, JS, JSON, package, YAML, PDF, ZIP, MD, SVG, imagem...), também na lista de arquivos do projeto (`public/filekinds.js`).
+- **Identidade:** Siart, criada pela Velroc, fundada por Sagaz e Knx. Não revela nem inventa detalhes do modelo interno.
+- **Sites profissionais:** roteiro completo (brief, tokens, estrutura de landing, acabamento, código em arquivos pequenos) e `review_website` com avisos de qualidade (placeholders, links mortos, emoji como ícone, foco visível, movimento reduzido, CSS curto, poucas seções).
+- Botão **Tentar novamente** em respostas com erro, botão de **ir ao fim** durante a rolagem e **Esc** para parar a resposta.

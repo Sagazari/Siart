@@ -75,6 +75,8 @@
       row.className = 'f-row';
       if (f.editable) { row.type = 'button'; row.addEventListener('click', () => openFile(f.path)); }
       else { row.href = '/api/download?path=' + encodeURIComponent(f.path); row.setAttribute('download', ''); }
+      const kind = window.SiartFileKind ? window.SiartFileKind(f.path) : null;
+      if (kind) { const ic = document.createElement('span'); ic.className = 'f-ico'; ic.style.setProperty('--tone', kind.tone); ic.innerHTML = '<svg class="ico" aria-hidden="true"><use href="#' + kind.icon + '"/></svg>'; row.append(ic); }
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = f.path;
       const sz = document.createElement('span'); sz.className = 'sz'; sz.textContent = f.editable ? kb(f.size) : kb(f.size) + ' (baixar)';
       row.append(nm, sz);

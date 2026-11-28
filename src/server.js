@@ -185,11 +185,11 @@ function createServer(cfg = loadConfig()) {
     } catch (err) {
       if (!clientClosed) {
         const timedOut = ac.signal.aborted;
-        log({ level: 'error', event: 'chat_failure', taskId, tier: tier.id, reason: timedOut ? 'timeout' : (err.allFailed ? 'all_providers_failed' : err.upstreamStatus || err.name) });
+        log({ level: 'error', event: 'chat_failure', taskId, tier: tier.id, reason: timedOut ? 'timeout' : (err.allFailed ? 'all_providers_failed' : err.upstreamStatus || err.name), detail: process.env.SIART_DEBUG ? String(err.stack) : undefined });
         if (timedOut) send('task.failed', { code: 'timeout', message: 'A resposta demorou demais e foi interrompida.' });
         else if (err.allFailed) send('task.failed', {
           code: 'all_providers_failed', tried: err.tried || [],
-          message: 'Nenhum provedor de IA conseguiu responder agora. Consulte os motivos de cada tentativa no histórico de execução do servidor.',
+          message: 'Não consegui responder agora. Tente novamente em alguns instantes.',
         });
         else send('task.failed', { code: 'upstream_error', message: 'A conexão com o provedor de IA foi interrompida. Tente novamente.' });
       }

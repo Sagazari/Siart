@@ -8,6 +8,8 @@ const LIMITS = { maxFiles: 200, maxFileBytes: 512 * 1024, maxTotalBytes: 5 * 102
 const EDITABLE = new Set(['.html', '.htm', '.css', '.js', '.mjs', '.json', '.md', '.txt', '.csv', '.svg', '.xml',
   '.yml', '.yaml', '.ts', '.tsx', '.jsx', '.py', '.sql', '.sh', '.toml']);
 const BINARY_OK = new Set(['.pdf']);
+// Únicos nomes ocultos aceitos: configuração comum de projeto. Nada de .env, .git ou .history.
+const ALLOWED_DOT = new Set(['.github', '.gitignore', '.gitattributes', '.editorconfig', '.nvmrc', '.prettierrc', '.dockerignore', '.env.example']);
 
 class WorkspaceError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -21,13 +23,13 @@ function cleanPath(p) {
   const parts = n.split('/').filter(Boolean);
   if (!parts.length || parts.length > LIMITS.maxDepth) throw new WorkspaceError('Caminho inválido ou profundo demais.');
   for (const s of parts) {
-    if (s.length > 100 || s.startsWith('.') || /[\u0000-\u001f<>:"|?*]/.test(s)) throw new WorkspaceError('Nome de arquivo ou pasta não permitido.');
+    if (s.length > 100 || (s.startsWith('.') && !ALLOWED_DOT.has(s)) || /[\u0000-\u001f<>:"|?*]/.test(s)) throw new WorkspaceError('Nome de arquivo ou pasta não permitido.');
   }
   return parts.join('/');
 }
 
 const extOf = (p) => path.extname(p).toLowerCase();
-const isEditable = (p) => EDITABLE.has(extOf(p));
+const isEditable = (p) => EDITABLE.has(extOf(p)) || ALLOWED_DOT.has(path.posix.basename(p));
 
 function createWorkspace(root, limits = LIMITS) {
   const hist = path.join(root, '.history');
@@ -48,7 +50,7 @@ function createWorkspace(root, limits = LIMITS) {
     let entries;
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
     for (const e of entries) {
-      if (e.name.startsWith('.') || e.isSymbolicLink()) continue;
+      if ((e.name.startsWith('.') && !ALLOWED_DOT.has(e.name)) || e.isSymbolicLink()) continue;
       const rel = base ? `${base}/${e.name}` : e.name;
       if (e.isDirectory()) {
         out.dirs.push(rel);
@@ -251,6 +253,25 @@ function createWorkspace(root, limits = LIMITS) {
     }
     if (hasCss && !/(?:display\s*:\s*(?:grid|flex)|\.container|\.wrapper)/i.test(cssText) && !htmlFiles.some((f) => /<style\b[^>]*>[\s\S]*?(?:display\s*:\s*(?:grid|flex)|\.container|\.wrapper)/i.test(read(f.path).content))) {
       warnings.push({ code: 'basic-layout', message: 'Não foi detectada uma estrutura de layout comum (grid/flex/container); confira o acabamento visual.' });
+    }
+    // Qualidade de acabamento (avisos, não bloqueiam a entrega): o que separa um site comum de um profissional.
+    const allHtml = htmlFiles.map((f) => read(f.path).content).join('\n');
+    const allCss = cssText + '\n' + [...allHtml.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join('\n');
+    if (/lorem ipsum|seu texto aqui|your text here|empresa x\b|nome do produto/i.test(allHtml)) warnings.push({ code: 'placeholder-copy', message: 'Há texto de exemplo (lorem ipsum ou placeholder). Troque por conteúdo específico e realista.' });
+    if ((allHtml.match(/\bhref=["']#["']/gi) || []).length > 2) warnings.push({ code: 'dead-links', message: 'Vários links apontam para "#". Aponte para seções reais ou páginas existentes.' });
+    if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(allHtml.replace(/<script[\s\S]*?<\/script>/gi, ''))) warnings.push({ code: 'emoji-icons', message: 'Emojis aparecem na interface. Use ícones SVG consistentes.' });
+    if (/<img\b(?![^>]*\balt=)/i.test(allHtml)) warnings.push({ code: 'img-alt', message: 'Há imagens sem atributo alt.' });
+    if (/<img\b[^>]*\bsrc=["']https?:/i.test(allHtml)) warnings.push({ code: 'external-image', message: 'Há imagens de URLs externas, que podem não carregar. Prefira SVG, CSS ou data URI.' });
+    if (htmlFiles.length && !/<meta\s+[^>]*name=["']description["']/i.test(allHtml)) warnings.push({ code: 'meta-description', message: 'Adicione <meta name="description"> para SEO e pré-visualização.' });
+    if (hasCss && !/:root\s*\{[^}]*--[\w-]+\s*:/i.test(allCss)) warnings.push({ code: 'design-tokens', message: 'Defina tokens de design (variáveis CSS em :root) para cor, espaçamento e tipografia.' });
+    if (hasCss && !/:focus-visible/i.test(allCss)) warnings.push({ code: 'focus-visible', message: 'Falta estilo de foco visível (:focus-visible) para navegação por teclado.' });
+    if (hasCss && /@keyframes|animation\s*:|transition\s*:/i.test(allCss) && !/prefers-reduced-motion/i.test(allCss)) warnings.push({ code: 'reduced-motion', message: 'Há animações sem tratamento de prefers-reduced-motion.' });
+    if (hasCss && allCss.replace(/\s+/g, '').length < 3500) warnings.push({ code: 'thin-styles', message: 'O CSS é muito curto para um acabamento profissional (tipografia, camadas, estados e responsividade).' });
+    if (byPath.has('index.html')) {
+      const idx = read('index.html').content;
+      if ((idx.match(/<section\b/gi) || []).length < 4 && /landing|site|empresa|produto/i.test(idx.slice(0, 4000))) warnings.push({ code: 'few-sections', message: 'A página inicial tem poucas seções. Uma landing completa costuma ter hero, prova social, recursos, como funciona, preços/planos, FAQ e chamada final.' });
+      if (!/<nav\b/i.test(idx)) warnings.push({ code: 'missing-nav', path: 'index.html', message: 'Não há <nav> de navegação.' });
+      if (!/<footer\b/i.test(idx)) warnings.push({ code: 'missing-footer', path: 'index.html', message: 'Não há <footer>.' });
     }
     const jsFiles = files.filter((f) => /\.m?js$/i.test(f.path));
     for (const f of jsFiles) {

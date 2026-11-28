@@ -178,7 +178,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100
 
 .meta { margin-top: 10px; font-size: 12px; color: var(--text-3); }
 .fb { margin: 0 0 10px; padding: 2px 0 2px 12px; border-left: 2px solid var(--border-strong); font-size: 13px; color: var(--text-3); }
-.err { margin-top: 10px; padding: 10px 14px; border: 1px solid rgba(229, 133, 123, .4); border-radius: var(--r-md); background: var(--danger-bg); color: var(--danger); font-size: 14px; }
+.err { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 10px; padding: 10px 14px; border: 1px solid rgba(229, 133, 123, .4); border-radius: var(--r-md); background: var(--danger-bg); color: var(--danger); font-size: 14px; }
 .stopped { margin-top: 8px; font-size: 13px; color: var(--text-3); }
 
 .message-actions { display: flex; gap: 2px; margin-top: 8px; margin-left: -8px; }
@@ -197,6 +197,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100
 .work-current { display: inline-block; font-size: 13.5px; font-weight: 500; letter-spacing: -.005em; }
 .work-current.emerge { animation: emerge .5s var(--ease-out) both, shimmer 2.2s linear infinite; animation-delay: 0s, var(--shimmer-delay, 0s); }
 .work-current.is-done { color: var(--text-2); -webkit-text-fill-color: currentColor; background: none; animation: none; }
+.work-time { margin-left: 2px; font-size: 12.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .work-done-icon { display: inline-grid; place-items: center; width: 18px; height: 18px; color: var(--accent); font-size: 14px; font-weight: 700; line-height: 1; }
 
 .activity { list-style: none; margin: 8px 0 0 28px; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-3); }
@@ -209,27 +210,34 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100
 .activity-label { overflow-wrap: anywhere; }
 .activity-label.is-running.shimmer { font-weight: 500; }
 
-/* ---------- Cartões de arquivo: neutros, como os artefatos do Claude ---------- */
+/* ---------- Cartões de arquivo: transparentes, com cor e ícone próprios por tipo ---------- */
 .artifact-card {
+  --tone: #a3acb9;
   display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px 14px; align-items: center;
   max-width: 560px; margin: 12px 0 16px 28px; padding: 14px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
-  transition: border-color .15s ease;
+  background: rgba(255, 255, 255, .03);
+  background: color-mix(in srgb, var(--tone) 9%, transparent);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border: 1px solid color-mix(in srgb, var(--tone) 34%, transparent);
+  border-radius: var(--r-md);
+  transition: background-color .2s ease, border-color .2s ease;
 }
-.artifact-card:hover { border-color: var(--border-strong); }
-.artifact-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; background: var(--bg-side); border: 1px solid var(--border); color: var(--text-2); font-size: 10.5px; font-weight: 600; letter-spacing: .02em; }
+.artifact-card:hover { background: color-mix(in srgb, var(--tone) 13%, transparent); border-color: color-mix(in srgb, var(--tone) 52%, transparent); }
+.artifact-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; color: var(--tone); background: rgba(255, 255, 255, .06); background: color-mix(in srgb, var(--tone) 20%, transparent); border: 1px solid color-mix(in srgb, var(--tone) 38%, transparent); }
+.artifact-icon .ico { width: 24px; height: 24px; }
 .artifact-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .artifact-info strong { font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
-.artifact-info span { font-size: 12px; color: var(--text-3); overflow-wrap: anywhere; }
+.artifact-info span { font-size: 12px; color: color-mix(in srgb, var(--tone) 55%, var(--text-3)); overflow-wrap: anywhere; }
 .artifact-actions { grid-column: 2; display: flex; flex-wrap: wrap; gap: 8px; }
 .artifact-btn {
   display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 14px;
-  border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: transparent; color: var(--text);
-  font-size: 13px; font-weight: 500; text-decoration: none; transition: background-color .15s ease, border-color .15s ease;
+  border: 1px solid rgba(255, 255, 255, .2); border: 1px solid color-mix(in srgb, var(--tone) 45%, transparent); border-radius: var(--r-sm);
+  background: transparent; color: var(--text); font-size: 13px; font-weight: 500; text-decoration: none;
+  transition: background-color .15s ease, border-color .15s ease;
 }
-.artifact-btn:hover { background: var(--surface-2); }
-.artifact-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.artifact-btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.artifact-btn:hover { background: color-mix(in srgb, var(--tone) 16%, transparent); }
+.artifact-btn.primary { background: var(--tone); border-color: var(--tone); color: #15120f; font-weight: 600; }
+.artifact-btn.primary:hover { background: color-mix(in srgb, var(--tone) 86%, #fff); border-color: transparent; }
 
 /* ---------- Estado vazio ---------- */
 .empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 14vh; }
@@ -241,7 +249,10 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100
 .chip:hover { background: var(--surface); color: var(--text); }
 
 /* ---------- Compositor ---------- */
-#composer { padding: 6px 16px calc(12px + env(safe-area-inset-bottom)); }
+#composer { position: relative; padding: 6px 16px calc(12px + env(safe-area-inset-bottom)); }
+.jump { position: absolute; left: 50%; top: -46px; transform: translateX(-50%); width: 34px; height: 34px; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 50%; color: var(--text-2); transition: background-color .15s ease, color .15s ease; }
+.jump:hover { background: var(--surface-2); color: var(--text); }
+.jump[hidden] { display: none; }
 .model-picker { position: relative; max-width: var(--col); margin: 0 auto 6px; display: flex; justify-content: flex-end; }
 .model-toggle { border: 0; background: transparent; color: var(--text-3); font-size: 12px; padding: 4px 8px; border-radius: var(--r-sm); transition: color .15s ease, background-color .15s ease; }
 .model-toggle:hover, .model-toggle[aria-expanded="true"] { color: var(--text); background: var(--surface); }
@@ -306,6 +317,8 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100
 .f-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
 .f-row { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 10px; border-radius: var(--r-sm); background: none; border: 0; width: 100%; text-align: left; color: var(--text); text-decoration: none; transition: background-color .15s ease; }
 .f-row:hover { background: var(--surface); }
+.f-ico { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 6px; color: var(--tone, var(--text-3)); background: color-mix(in srgb, var(--tone, #888) 16%, transparent); }
+.f-ico .ico { width: 15px; height: 15px; }
 .f-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 13px; }
 .f-row .sz { color: var(--text-3); font-size: 12px; flex: none; }
 .e-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }

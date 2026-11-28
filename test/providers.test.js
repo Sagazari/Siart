@@ -104,8 +104,8 @@ test('cada nível usa seu modelo, esforço, limite de tokens e ferramentas', asy
   try {
     for (const t of ['absoluty', 'moyenne', 'basse']) await (await chat(port, { tier: t })).text();
     const [abs, moy, bas] = g.hits;
-    assert.equal(abs.model, 'openai/gpt-oss-120b'); assert.equal(abs.reasoning_effort, 'high'); assert.equal(abs.max_completion_tokens, 8192); assert.ok(abs.tools);
-    assert.equal(moy.reasoning_effort, 'medium'); assert.equal(moy.max_completion_tokens, 4096); assert.ok(moy.tools);
+    assert.equal(abs.model, 'openai/gpt-oss-120b'); assert.equal(abs.reasoning_effort, 'high'); assert.equal(abs.max_completion_tokens, 16384); assert.ok(abs.tools);
+    assert.equal(moy.reasoning_effort, 'medium'); assert.equal(moy.max_completion_tokens, 8192); assert.ok(moy.tools);
     assert.equal(bas.model, 'openai/gpt-oss-20b'); assert.equal(bas.reasoning_effort, 'low'); assert.equal(bas.max_completion_tokens, 2048);
     assert.equal(bas.tools, undefined);
     assert.ok(!bas.messages[0].content.includes('ferramentas para trabalhar no projeto'));
@@ -233,7 +233,7 @@ test('IDs de ferramenta são normalizados e o histórico segue válido ao trocar
   const { server, port } = await startApp({ GROQ_API_KEY: 'k', GROQ_BASE_URL: groq.url, GEMINI_API_KEY: 'g', GEMINI_BASE_URL: gem.url });
   try {
     const ev = await events(await chat(port));
-    assert.deepEqual(names(ev).filter((n) => !n.startsWith('message.d')), ['task.started', 'model.selected', 'tool.started', 'tool.completed', 'model.fallback', 'model.selected', 'message.completed', 'task.completed']);
+    assert.deepEqual(names(ev).filter((n) => !n.startsWith('message.d') && n !== 'tool.preparing'), ['task.started', 'model.selected', 'tool.started', 'tool.completed', 'model.fallback', 'model.selected', 'message.completed', 'task.completed']);
     assert.equal(text(ev).trim(), 'Arquivo criado.');
     const msgs = gem.hits[0].messages;
     const asst = msgs.find((m) => m.tool_calls);
@@ -267,5 +267,81 @@ test('servidor aplica o limite de mensagens por conversa', async () => {
     const over = await chat(port, { messages: [...four, msg('user', 5)] });
     assert.equal(over.status, 400);
     assert.match((await over.json()).error, /entre 1 e 4 mensagens/);
+  } finally { await close(server); await close(groq.server); }
+});
+
+// ---------- velocidade percebida ----------
+test('em níveis com ferramentas, texto sem chamadas sai ao vivo e a ferramenta anuncia progresso com caminho e tamanho', async () => {
+  const groq = await provider((b, q, res, n) => {
+    if (n === 1) {
+      const args = JSON.stringify({ path: 'src/grande.md', content: 'x'.repeat(500) });
+      return ok(res, [{ tool_calls: [{ index: 0, id: 'c1', type: 'function', function: { name: 'write_project_file', arguments: args.slice(0, 40) } }] }, { tool_calls: [{ index: 0, function: { arguments: args.slice(40) } }] }]);
+    }
+    ok(res, ['Pronto, ', 'arquivo criado.']);
+  });
+  const { server, port } = await startApp({ GROQ_API_KEY: 'k', GROQ_BASE_URL: groq.url });
+  try {
+    const ev = await events(await chat(port));
+    const prep = ev.filter((e) => e.event === 'tool.preparing');
+    assert.ok(prep.length >= 1);
+    assert.equal(prep[0].data.tool, 'write_project_file');
+    assert.equal(prep.at(-1).data.path, 'src/grande.md');
+    assert.ok(names(ev).indexOf('tool.preparing') < names(ev).indexOf('tool.started'));
+    assert.equal(text(ev).trim(), 'Pronto, arquivo criado.');
+  } finally { await close(server); await close(groq.server); }
+});
+
+test('falha total devolve mensagem simples, sem citar provedores nem logs', async () => {
+  const groq = await provider(fail(500));
+  const { server, port } = await startApp({ GROQ_API_KEY: 'k', GROQ_BASE_URL: groq.url });
+  try {
+    const ev = await events(await chat(port));
+    const failed = ev.find((e) => e.event === 'task.failed');
+    assert.match(failed.data.message, /Não consegui responder agora/);
+    assert.doesNotMatch(failed.data.message, /provedor|servidor|log/i);
+  } finally { await close(server); await close(groq.server); }
+});
+
+test('modelo que ignora a revisão do site não prende a resposta em laço infinito', async () => {
+  const groq = await provider((b, q, res, n) => {
+    if (n === 1) return ok(res, toolCall('c1', 'write_project_file', JSON.stringify({ path: 'index.js', content: 'let a = 1;' })));
+    ok(res, ['Feito.']);
+  });
+  const { server, port } = await startApp({ GROQ_API_KEY: 'k', GROQ_BASE_URL: groq.url });
+  try {
+    const ev = await events(await chat(port));
+    assert.ok(groq.hits.length <= 4, 'chamadas ao provedor: ' + groq.hits.length);
+    assert.match(text(ev), /Não vou marcar o site como concluído/);
+    assert.ok(names(ev).includes('task.completed'));
+  } finally { await close(server); await close(groq.server); }
+});
+
+test('chamada de ferramenta escrita como texto é executada e nunca aparece para o usuário', async () => {
+  const xml = '<tool_call>\n<function=write_project_file>\n<parameter=path>\nnotas.md\n</parameter>\n<parameter=content>\n# Olá\n</parameter>\n</function>\n</tool_call>';
+  const groq = await provider((b, q, res, n) => {
+    if (n === 1) return ok(res, ['Vou criar o arquivo. ', xml.slice(0, 20), xml.slice(20)]);
+    ok(res, ['Arquivo criado.']);
+  });
+  const { server, port } = await startApp({ GROQ_API_KEY: 'k', GROQ_BASE_URL: groq.url });
+  try {
+    const ev = await events(await chat(port));
+    assert.ok(names(ev).includes('tool.completed'));
+    assert.doesNotMatch(text(ev), /tool_call|<function|<parameter/);
+    assert.match(text(ev), /Arquivo criado\./);
+    const tool = groq.hits[1].messages.at(-1);
+    assert.equal(tool.role, 'tool');
+    assert.equal(JSON.parse(tool.content).ok, true);
+  } finally { await close(server); await close(groq.server); }
+});
+
+test('nas cobranças de revisão o texto do modelo não é repetido na tela', async () => {
+  const groq = await provider((b, q, res, n) => {
+    if (n === 1) return ok(res, toolCall('c1', 'write_project_file', JSON.stringify({ path: 'index.html', content: '<!doctype html><title>x</title>' })));
+    ok(res, ['Pronto, criei.']);
+  });
+  const { server, port } = await startApp({ GROQ_API_KEY: 'k', GROQ_BASE_URL: groq.url });
+  try {
+    const ev = await events(await chat(port, { messages: [{ role: 'user', content: 'crie um projeto simples' }] }));
+    assert.equal((text(ev).match(/Pronto, criei\./g) || []).length, 1);
   } finally { await close(server); await close(groq.server); }
 });

@@ -18,7 +18,7 @@ const throwsWs = (fn, re) => assert.throws(fn, (e) => e instanceof WorkspaceErro
 
 // ---------- workspace ----------
 test('cleanPath bloqueia traversal, absolutos, dotfiles e caracteres perigosos', () => {
-  for (const bad of ['../x', 'a/../../x', '/../x', '..', '.', '', 'a\\b', 'a\0b', '.env', 'a/.git/x', '.history/changes.jsonl', 'a/b:c', 'x'.repeat(301)]) {
+  for (const bad of ['../x', 'a/../../x', '/../x', '..', '.', '', 'a\\b', 'a\0b', '.env', 'a/.git/x', '.history/changes.jsonl', '.github/../.env', '.gitconfig', 'a/b:c', 'x'.repeat(301)]) {
     assert.throws(() => cleanPath(bad), WorkspaceError, `deveria rejeitar: ${JSON.stringify(bad)}`);
   }
   assert.equal(cleanPath('/src//app.js'), 'src/app.js');
@@ -366,4 +366,12 @@ test('ACCESS_CODE: bloqueia API sem login, aceita código correto e limita tenta
     for (let i = 0; i < 12; i++) await post('/api/login', { code: 'x' });
     assert.equal((await post('/api/login', { code: 'segredo123' })).status, 429);
   } finally { await close(server); }
+});
+
+test('cleanPath aceita apenas ocultos de configuração (.github, .gitignore, .editorconfig)', () => {
+  const { cleanPath } = require('../src/workspace');
+  assert.equal(cleanPath('.github/workflows/ci.yml'), '.github/workflows/ci.yml');
+  assert.equal(cleanPath('.gitignore'), '.gitignore');
+  assert.throws(() => cleanPath('.env'));
+  assert.throws(() => cleanPath('.history/x.json'));
 });

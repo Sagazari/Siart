@@ -17,7 +17,7 @@
     'Crie um site profissional',
   ];
 
-  const REASON = { rate_limit: 'atingiu o limite de uso', unavailable: 'está indisponível', auth: 'não aceitou a chave', timeout: 'demorou demais', model_unavailable: 'não tem esse modelo', billing: 'está sem créditos ou faturamento ativo', rejected: 'rejeitou a requisição (verifique modelo e parâmetros)', empty: 'não respondeu' };
+  const _unusedReason = { rate_limit: 'atingiu o limite de uso', unavailable: 'está indisponível', auth: 'não aceitou a chave', timeout: 'demorou demais', model_unavailable: 'não tem esse modelo', billing: 'está sem créditos ou faturamento ativo', rejected: 'rejeitou a requisição (verifique modelo e parâmetros)', empty: 'não respondeu' };
   let tiers = [];
   let tierId = null;
   try { tierId = localStorage.getItem('siart.tier'); } catch { /* sem armazenamento */ }
@@ -224,13 +224,56 @@
     });
   }
 
+  // ---------- Mensagem de carregamento: etapa real, tempo decorrido e aviso em esperas longas ----------
+  const startedAt = new WeakMap();
+  let workTimer = null;
+  const FILE_TOOLS = ['write_project_file', 'read_project_file', 'apply_file_patch'];
+  const formatBytes = (n) => n < 1024 ? n + ' B' : (n / 1024).toFixed(1).replace('.', ',') + ' KB';
+  function formatElapsed(secs) { const s = Math.floor(secs); return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + String(s % 60).padStart(2, '0') + ' s'; }
+  function elapsedSeconds(m) { return (Date.now() - (startedAt.get(m) || Date.now())) / 1000; }
+  function computeStage(m) {
+    const running = [...(m.activities || [])].reverse().find((a) => a.status === 'running');
+    if (running) return running.label;
+    if (m.content) return 'Escrevendo a resposta…';
+    if (m.activities && m.activities.length) return 'Conferindo os resultados…';
+    const secs = elapsedSeconds(m);
+    if (secs < 3) return 'Analisando sua solicitação…';
+    if (secs < 8) return 'Organizando as ideias…';
+    if (secs < 20) return 'Elaborando a resposta…';
+    if (secs < 45) return 'Está demorando um pouco mais que o normal…';
+    return 'Ainda trabalhando. Você pode parar quando quiser.';
+  }
+  function tickWork(reply) {
+    if (!reply.working) return;
+    const next = computeStage(reply);
+    if (next !== reply.stage) { reply.stage = next; refreshLast(reply); return; }
+    const secs = elapsedSeconds(reply);
+    if (secs < 5) return;
+    const node = el.messages.querySelector('.msg:last-child .work-time');
+    if (node) node.textContent = formatElapsed(secs); else refreshLast(reply);
+  }
+  function startWorkTicker(reply) { stopWorkTicker(); startedAt.set(reply, Date.now()); workTimer = setInterval(() => tickWork(reply), 1000); }
+  function stopWorkTicker() { clearInterval(workTimer); workTimer = null; }
+  // O modelo começou a montar uma ferramenta (por exemplo, um arquivo grande): mostra já o nome e o tamanho gerado.
+  function onToolPreparing(reply, data) {
+    (reply.activities ||= []);
+    const verb = TOOL_LABEL[data.tool] || 'Executando uma etapa da tarefa';
+    const label = FILE_TOOLS.includes(data.tool) && data.path ? verb + ' ' + data.path : verb;
+    let a = reply.activities.find((x) => x.preparing && x.tool === data.tool && (!x.path || !data.path || x.path === data.path))
+      || (data.path && reply.activities.find((x) => x.tool === data.tool && x.path === data.path));
+    if (!a) { a = { key: data.tool + '|' + (data.path || ''), tool: data.tool, path: data.path || '', id: null, callIds: [], label, detail: '', status: 'running', preparing: true }; reply.activities.push(a); }
+    a.status = 'running'; a.preparing = true; a.label = label; a.path = data.path || a.path;
+    a.detail = data.bytes > 600 ? formatBytes(data.bytes) + ' gerados' : '';
+    reply.stage = label;
+    refreshLast(reply);
+  }
   const TOOL_LABEL = {
     list_project_files: 'Mapeando a estrutura do projeto', review_website: 'Revisando o site antes da entrega', read_project_file: 'Analisando arquivo',
     write_project_file: 'Construindo arquivo', apply_file_patch: 'Refinando implementação',
     create_project_directory: 'Organizando diretórios', rename_project_file: 'Reorganizando arquivos',
     generate_pdf: 'Preparando documento',
   };
-  function initialWorkStage() { return 'Analisando sua solicitação...'; }
+  function initialWorkStage() { return 'Analisando sua solicitação…'; }
   const STATUS_TEXT = { running: 'em andamento', done: 'concluído', failed: 'falhou', cancelled: 'cancelado' };
 
   // ---------- Renderização ----------
@@ -262,13 +305,6 @@
   function messageNode(m, live, enter) {
     const wrap = document.createElement('div');
     wrap.className = 'msg ' + m.role + (live ? ' streaming' : '') + (enter ? ' enter' : '');
-    (m.fallbacks || []).forEach((f) => {
-      const d = document.createElement('div');
-      d.className = 'fb';
-      d.textContent = f.text;
-      markNew(d, f);
-      wrap.append(d);
-    });
     if ((live && m.working) || (m.activities && m.activities.length)) {
       const status = document.createElement('div'); status.className = 'work-status' + (live && m.working ? ' is-running' : '');
       const head = document.createElement('div'); head.className = 'work-head';
@@ -278,8 +314,9 @@
         const changed = stageSeen.get(m) !== m.stage; stageSeen.set(m, m.stage);
         const clip = document.createElement('span'); clip.className = 'work-clip';
         const label = document.createElement('span'); label.className = 'work-current shimmer' + (changed ? ' emerge' : '');
-        label.textContent = m.stage || 'Analisando sua solicitação...';
+        label.textContent = m.stage || 'Analisando sua solicitação…';
         clip.append(label); head.append(clip);
+        if (elapsedSeconds(m) >= 5) { const time = document.createElement('span'); time.className = 'work-time'; time.textContent = formatElapsed(elapsedSeconds(m)); head.append(time); }
       } else {
         if (m.completed) {
           const done = document.createElement('span'); done.className = 'work-done-icon'; done.setAttribute('aria-label', 'Concluído'); done.textContent = '✓'; head.append(done);
@@ -290,7 +327,8 @@
       status.append(head);
       if (m.activities && m.activities.length) {
         const list = document.createElement('ul'); list.className = 'activity';
-        m.activities.forEach((a) => {
+        const acts = (live && m.working) ? m.activities : m.activities.filter((a, i) => !(a.status === 'failed' && a.tool && m.activities.slice(i + 1).some((b) => b.tool === a.tool && b.status === 'done')));
+        acts.forEach((a) => {
           const item = document.createElement('li');
           const mark = document.createElement('span'); mark.className = 'st ' + a.status;
           mark.setAttribute('aria-label', a.status === 'running' ? 'Em andamento' : a.status === 'failed' ? 'Falhou' : 'Concluído');
@@ -307,15 +345,14 @@
     // Arquivos realmente gravados no workspace viram cartões com ações concretas.
     (m.artifacts || []).forEach((artifact) => {
       const card = document.createElement('section'); card.className = 'artifact-card';
-      const icon = document.createElement('span'); icon.className = 'artifact-icon';
       const filename = artifact.path.split('/').pop();
-      const ext = (filename.split('.').pop() || 'file').toLowerCase();
-      const kind = ['html','htm'].includes(ext) ? 'html' : ['css'].includes(ext) ? 'css' : ['js','mjs','ts','tsx','jsx'].includes(ext) ? 'js' : ext === 'pdf' ? 'pdf' : ['png','jpg','jpeg','webp','svg','gif'].includes(ext) ? 'image' : ext === 'json' ? 'json' : 'file';
-      icon.dataset.kind = kind;
-      icon.textContent = ({html:'HTML',css:'CSS',js:'JS',pdf:'PDF',image:'IMG',json:'JSON',file:ext.slice(0,5).toUpperCase()})[kind];
+      const kind = window.SiartFileKind ? window.SiartFileKind(artifact.path) : { id: 'file', label: 'ARQ', tone: '#a3acb9', icon: 'f-file' };
+      card.style.setProperty('--tone', kind.tone); card.dataset.kind = kind.id;
+      const icon = document.createElement('span'); icon.className = 'artifact-icon'; icon.setAttribute('aria-hidden', 'true');
+      icon.innerHTML = '<svg class="ico"><use href="#' + kind.icon + '"/></svg>';
       const info = document.createElement('div'); info.className = 'artifact-info';
       const name = document.createElement('strong'); name.textContent = filename;
-      const path = document.createElement('span'); path.textContent = artifact.path === filename ? 'Arquivo do projeto' : artifact.path;
+      const path = document.createElement('span'); path.textContent = kind.label + ' · ' + (artifact.path === filename ? 'Arquivo do projeto' : artifact.path);
       info.append(name, path);
       const actions = document.createElement('div'); actions.className = 'artifact-actions';
       const download = document.createElement('a'); download.className = 'artifact-btn primary';
@@ -342,16 +379,19 @@
         }
       });
     }
-    else if (live && !m.content && !(m.fallbacks && m.fallbacks.length)) {
+    else if (live && !m.content && true) {
       bubble.textContent = ''; // sem animação duplicada de três pontos; o status da Lua já indica atividade
     } else { bubble.innerHTML = md(m.content); if (live) applyReveal(bubble, m); }
     wrap.append(bubble);
-    if (m.via && m.role === 'assistant') { const v = document.createElement('div'); v.className = 'meta'; v.textContent = m.via.tier + ' · via ' + m.via.provider; wrap.append(v); }
     if (m.role === 'assistant' && m.content && !live) { const actions = document.createElement('div'); actions.className = 'message-actions'; const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'message-action copy-answer'; copy.textContent = 'Copiar resposta'; copy.dataset.copy = 'answer'; actions.append(copy);
       if ('speechSynthesis' in window) { const listen = document.createElement('button'); listen.type = 'button'; listen.className = 'message-action listen-answer'; listen.setAttribute('aria-label', 'Ouvir a resposta'); listen.innerHTML = '<svg class="ico" aria-hidden="true"><use href="#i-volume"/></svg><span>Ouvir</span>'; actions.append(listen); }
       wrap.append(actions); }
     if (m.stopped) { const s = document.createElement('div'); s.className = 'stopped'; s.textContent = 'Resposta interrompida.'; wrap.append(s); }
-    if (m.error) { const e = document.createElement('div'); e.className = 'err'; e.textContent = m.error; wrap.append(e); }
+    if (m.error) {
+      const e = document.createElement('div'); e.className = 'err'; const msg = document.createElement('span'); msg.textContent = m.error; e.append(msg);
+      const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'btn-sm retry-btn'; retry.textContent = 'Tentar novamente'; e.append(retry);
+      wrap.append(e);
+    }
     syncShimmer(wrap);
     return wrap;
   }
@@ -582,6 +622,7 @@
     chat.updatedAt = Date.now();
     save();
     setStreaming(true);
+    startWorkTicker(reply);
     renderAll(chat.messages.length - 2);
 
     // Só mensagens com conteúdo vão ao servidor; o último item (resposta em branco) fica de fora.
@@ -598,26 +639,26 @@
         throw new Error(j.error || 'Erro ' + res.status + ' ao enviar a mensagem.');
       }
       await readSSE(res.body, (event, data) => {
-        if (event === 'task.started') { reply.working = true; reply.stage = 'Analisando sua solicitação...'; refreshLast(reply);
+        if (event === 'task.started') { reply.working = true; reply.stage = 'Analisando sua solicitação…'; refreshLast(reply);
         } else if (event === 'task.completed') { reply.working = false; reply.completed = true;
         } else if (event === 'message.delta') {
           pushDelta(reply, data.text);
-        } else if (event === 'model.selected') {
-          reply.via = { tier: data.tierName, provider: data.providerName };
-        } else if (event === 'model.fallback') {
-          (reply.fallbacks ||= []).push({ text: data.fromName + ' ' + (REASON[data.reason] || 'falhou') + '. Usando ' + data.toName + '.' });
-          refreshLast(reply);
+        } else if (event === 'model.selected' || event === 'model.fallback') {
+          // Detalhes de provedores ficam só no log do servidor; a interface não os mostra.
+        } else if (event === 'tool.preparing') {
+          onToolPreparing(reply, data);
         } else if (event === 'tool.started') {
           reply.stage = TOOL_LABEL[data.tool] || 'Executando uma etapa da tarefa...';
           const actionLabel = ['write_project_file', 'read_project_file', 'apply_file_patch'].includes(data.tool) && data.path ? reply.stage + ' ' + data.path : reply.stage;
           const actionKey = data.tool + '|' + (data.path || '');
           (reply.activities ||= []);
-          let activity = reply.activities.find((a) => a.key === actionKey);
+          let activity = reply.activities.find((a) => a.preparing && a.tool === data.tool && (!a.path || a.path === (data.path || '')))
+            || reply.activities.find((a) => a.key === actionKey);
           if (activity) {
-            activity.status = 'running'; activity.detail = '';
+            activity.status = 'running'; activity.detail = ''; activity.preparing = false; activity.key = actionKey; activity.label = actionLabel; activity.tool = data.tool;
             (activity.callIds ||= []).push(data.callId);
           } else {
-            activity = { key: actionKey, id: data.callId, callIds: [data.callId], label: actionLabel, detail: '', status: 'running' };
+            activity = { key: actionKey, tool: data.tool, id: data.callId, callIds: [data.callId], label: actionLabel, detail: '', status: 'running' };
             reply.activities.push(activity);
           }
           refreshLast(reply);
@@ -625,7 +666,7 @@
           const activity = (reply.activities || []).find((a) => a.id === data.callId || (a.callIds || []).includes(data.callId));
           if (activity) { activity.status = event === 'tool.failed' ? 'failed' : 'done'; if (event === 'tool.failed') activity.detail = data.message || activity.detail; }
           const running = [...(reply.activities || [])].reverse().find((a) => a.status === 'running');
-          reply.stage = running ? running.label : (event === 'tool.failed' ? 'Ajustando a etapa que falhou...' : 'Conferindo os resultados...');
+          reply.stage = running ? running.label : (event === 'tool.failed' ? 'Ajustando a etapa que falhou…' : 'Conferindo os resultados…');
           if (event === 'tool.completed' && data.mutated && data.path && ['write_project_file', 'apply_file_patch', 'generate_pdf'].includes(data.tool)) {
             const ext = data.path.split('.').pop().toLowerCase();
             const kind = ext === 'pdf' ? 'pdf' : ['html', 'htm'].includes(ext) ? 'html' : 'file';
@@ -640,9 +681,11 @@
       });
     } catch (e) {
       if (e.name === 'AbortError') reply.stopped = true;
-      else reply.error = (e instanceof TypeError || /network|fetch failed|failed to fetch/i.test(e.message || '')) ? 'Falha de conexão com os provedores. Confira sua internet e tente novamente.' : (e.message || 'Falha de conexão.');
+      else reply.error = (e instanceof TypeError || /network|fetch failed|failed to fetch/i.test(e.message || '')) ? 'Falha de conexão. Confira sua internet e tente novamente.' : (e.message || 'Falha de conexão.');
     } finally {
+      stopWorkTicker();
       if (reply.stopped || reply.error) flushPacer(reply); else await drained(reply);
+      reply.activities = (reply.activities || []).filter((a) => !(a.preparing && a.status === 'running'));
       reply.working = false;
       controller = null;
       setStreaming(false);
@@ -908,6 +951,18 @@
   el.messages.addEventListener('click', async (e) => {
     const answerBtn = e.target.closest('.copy-answer');
     if (answerBtn) { const msg = answerBtn.closest('.msg'); const text = msg?.querySelector('.bubble')?.innerText || ''; try { await navigator.clipboard.writeText(text); answerBtn.textContent = 'Copiado'; } catch { answerBtn.textContent = 'Falha ao copiar'; } setTimeout(() => { answerBtn.textContent = 'Copiar resposta'; }, 1500); return; }
+    const retryBtn = e.target.closest('.retry-btn');
+    if (retryBtn) {
+      const chat = active();
+      const last = chat && chat.messages[chat.messages.length - 1];
+      if (streaming || !last || !last.error) return;
+      chat.messages.pop();
+      const asked = chat.messages.pop();
+      if (!asked) return;
+      save();
+      sendMessage(asked.content, asked.attachments || []);
+      return;
+    }
     const listenBtn = e.target.closest('.listen-answer');
     if (listenBtn) {
       if (speakingButton === listenBtn) { stopSpeaking(); if (voiceActive) restartListening(); else setVoiceState('off'); return; }
@@ -927,7 +982,12 @@
   function closeSidebar() { el.sidebar.classList.remove('open'); el.scrim.classList.remove('show'); }
   el.menu.addEventListener('click', openSidebar);
   el.scrim.addEventListener('click', closeSidebar);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeSidebar(); if (streaming && controller && preferences.root.hidden) controller.abort(); } });
+  const jump = $('jump');
+  const updateJump = () => { if (jump) jump.hidden = el.messages.scrollHeight - el.messages.scrollTop - el.messages.clientHeight < 160; };
+  el.messages.addEventListener('scroll', updateJump, { passive: true });
+  if (jump) jump.addEventListener('click', () => el.messages.scrollTo({ top: el.messages.scrollHeight, behavior: 'smooth' }));
+  new MutationObserver(updateJump).observe(el.messages, { childList: true, subtree: true });
 
   // ---------- Acesso restrito (opcional) ----------
   const login = { box: document.getElementById('login'), form: document.getElementById('login-form'), code: document.getElementById('code'), err: document.getElementById('login-err') };

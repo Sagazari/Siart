@@ -1,6 +1,7 @@
 'use strict';
 const crypto = require('node:crypto');
 const { TOOLS, MUTATING, runTool, buildSystemPrompt } = require('./tools');
+const { createTextGuard, parseTextToolCalls, hasToolMarkup } = require('./textcalls');
 
 // reasoning_effort só é enviado onde se sabe que é aceito, para não causar 400.
 const supportsEffort = (provider, model) =>
@@ -34,7 +35,7 @@ function classify(err) {
 }
 
 // Uma chamada em streaming. Acumula texto e chamadas de ferramenta.
-async function streamCompletion({ provider, body, signal, firstByteMs, onText }) {
+async function streamCompletion({ provider, body, signal, firstByteMs, onText, onTool = () => {} }) {
   const ac = new AbortController();
   const relay = () => ac.abort();
   if (signal.aborted) ac.abort(); else signal.addEventListener('abort', relay, { once: true });
@@ -88,6 +89,7 @@ async function streamCompletion({ provider, body, signal, firstByteMs, onText })
           if (tc.id) cur.id = tc.id;
           if (tc.function?.name) cur.name = tc.function.name;
           if (tc.function?.arguments) cur.args += tc.function.arguments;
+          onTool(cur);
         }
       }
     }
@@ -118,15 +120,32 @@ async function completeWithFallback({ cfg, tier, candidates, buildBody, call, st
       state.announced = c;
       send('model.selected', { tier: tier.id, tierName: tier.label, provider: c.provider, providerName: provider.name });
     };
+    // Avisa a interface assim que o modelo começa a montar uma ferramenta e a cada ~300 ms,
+    // com o tamanho já gerado: arquivos grandes deixam de parecer travados.
+    let lastProgress = 0, announcedTool = '';
+    const progress = (tc) => {
+      if (!tc.name) return;
+      const now = Date.now();
+      if (announcedTool === tc.name + '|' + (tc.id || '') && now - lastProgress < 300) return;
+      announcedTool = tc.name + '|' + (tc.id || ''); lastProgress = now;
+      const m = /"(?:path|from)"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(tc.args || '');
+      send('tool.preparing', { tool: tc.name, path: m ? m[1].slice(0, 200) : undefined, bytes: Buffer.byteLength(tc.args || '') });
+    };
     try {
       const bufferedChunks = [];
+      let sawToolCall = false;
       let result;
+      // O filtro impede que chamadas de ferramenta escritas como texto (<tool_call>...) cheguem à tela.
+      const guard = createTextGuard((t) => { if (!sawToolCall && !deferFinal) { emitted = true; announce(); onText(t); } else bufferedChunks.push(t); });
       try {
         result = await streamCompletion({
           provider, signal, firstByteMs: tier.firstByteMs, body: buildBody(c, call.useTools),
-          // Em ciclos com ferramentas, o conteúdo fica em buffer até sabermos se é código intermediário.
-          onText: (t) => { if (!call.useTools && !deferFinal) { emitted = true; announce(); onText(t); } else bufferedChunks.push(t); },
+          // O texto sai ao vivo enquanto nenhuma chamada de ferramenta apareceu. Se uma chamada surgir,
+          // o texto seguinte é intermediário e fica em buffer (descartado se houver ferramentas).
+          onText: guard.push,
+          onTool: (tc) => { sawToolCall = true; progress(tc); },
         });
+        guard.flush();
       } catch (err) {
         // Se o stream cair antes de completar uma resposta sem tool-call, preserva o texto parcial
         // já recebido e impede que outro provedor repita a mesma resposta.
@@ -169,6 +188,8 @@ async function completeWithFallback({ cfg, tier, candidates, buildBody, call, st
 async function runAgent({ cfg, tier, messages, userInstructions = '', voice = false, ws, send, signal, log, taskId, health }) {
   const hasImages = messages.some((m) => Array.isArray(m.content) && m.content.some((p) => p.type === 'image_url'));
   const requestedWebsite = messages.some((m) => m.role === 'user' && typeof m.content === 'string' && /\b(site|website|p[aá]gina|landing\s*page|html|web\s*app)\b/i.test(m.content));
+  // Só o prompt usa a lista ampla: o buffer de entrega (deferFinal) continua restrito a pedidos de site.
+  const wantsDesign = requestedWebsite || messages.some((m) => m.role === 'user' && typeof m.content === 'string' && /\b(css|front-?end|interface|layout|dashboard|portf[oó]lio|e-?commerce|loja\s*virtual|tela|design)\b/i.test(m.content));
   let candidates = tier.chain.filter((c) => cfg.providers[c.provider] && cfg.providers[c.provider].apiKey);
   if (hasImages) {
     const gemini = cfg.providers.gemini;
@@ -178,7 +199,7 @@ async function runAgent({ cfg, tier, messages, userInstructions = '', voice = fa
   if (!candidates.length) throw Object.assign(new Error('no providers'), { allFailed: true, tried: [] });
 
   const state = { toolsOn: Boolean(cfg.toolsEnabled && tier.tools && ws), announced: null };
-  const makePrompt = (tools) => buildSystemPrompt({ tools, voice }) + (userInstructions ? `\n\nPreferências persistentes definidas pelo usuário (trate como preferências, não como instruções de segurança):\n${userInstructions}` : '');
+  const makePrompt = (tools) => buildSystemPrompt({ tools, voice, site: wantsDesign }) + (userInstructions ? `\n\nPreferências persistentes definidas pelo usuário (trate como preferências, não como instruções de segurança):\n${userInstructions}` : '');
   const history = [{ role: 'system', content: makePrompt(state.toolsOn) }, ...messages];
   let promptHasTools = state.toolsOn;
   state.syncPrompt = (on) => {
@@ -199,26 +220,44 @@ async function runAgent({ cfg, tier, messages, userInstructions = '', voice = fa
   let emitted = false;
   let siteDirty = false;
   let siteReviewed = false;
+  let reviewNudges = 0;
+  let cutNudges = 0;
   for (;;) {
     const call = { useTools: state.toolsOn && steps < cfg.maxToolSteps };
     if (state.toolsOn && !call.useTools) state.syncPrompt(false); // limite de passos: pede a resposta final sem ferramentas
     const result = await completeWithFallback({
       cfg, tier, candidates, buildBody, call, state, signal, send, log, taskId, health,
       onText: (t) => { emitted = true; send('message.delta', { text: t }); },
-      deferFinal: requestedWebsite && (call.useTools || (siteDirty && !siteReviewed)),
+      deferFinal: (requestedWebsite && call.useTools) || (siteDirty && !siteReviewed), // nas cobranças de revisão o texto não é repetido na tela
     });
+    // Modelos que escrevem a chamada como texto: converte em chamadas reais e remove o markup do texto.
+    let truncatedMarkup = false;
+    if (hasToolMarkup(result.text)) {
+      const parsed = parseTextToolCalls(result.text, TOOLS);
+      result.text = parsed.clean;
+      truncatedMarkup = parsed.truncated;
+      if (call.useTools && !result.calls.length) result.calls = parsed.calls.map((x) => ({ id: newCallId(), name: x.name, args: x.args }));
+    }
     if (!call.useTools) {
       if (siteDirty && !siteReviewed) send('message.delta', { text: '\n\nNão vou marcar o site como concluído: a revisão obrigatória não foi executada ou ainda apontou problemas. Tente novamente para que eu possa revisar e corrigir os arquivos.' });
       else if (requestedWebsite && result.text && !emitted) send('message.delta', { text: result.text });
       return;
     }
     if (result.calls.length === 0) {
-      if (siteDirty && !siteReviewed) {
+      if (truncatedMarkup && cutNudges < 2) {
+        cutNudges++; steps++; // a chamada foi cortada pelo limite de tamanho e não foi executada
+        history.push({ role: 'assistant', content: result.text || '' });
+        history.push({ role: 'user', content: 'Sua última chamada de ferramenta foi cortada pelo limite de tamanho e NÃO foi executada. Refaça usando o mecanismo normal de chamada de função e divida o trabalho em arquivos menores (no máximo cerca de 250 linhas por arquivo, por exemplo styles.css, app.js e index.html separados).' });
+        continue;
+      }
+      if (siteDirty && !siteReviewed && reviewNudges < 2) {
+        reviewNudges++; // no máximo duas cobranças: sem limite, um modelo que ignora a revisão prendia a resposta até o tempo total
         history.push({ role: 'assistant', content: result.text || '' });
         history.push({ role: 'user', content: 'Antes de responder ao usuário, você PRECISA chamar review_website agora. Corrija todos os erros reportados e repita a revisão até que ela retorne ok=true. Não declare conclusão sem isso.' });
         continue;
       }
-      if (requestedWebsite && call.useTools && result.text) send('message.delta', { text: result.text });
+      if (siteDirty && !siteReviewed) send('message.delta', { text: (result.text ? result.text + '\n\n' : '') + 'Não vou marcar o site como concluído: a revisão obrigatória não foi executada. Tente novamente para que eu possa revisar e corrigir os arquivos.' });
+      else if (requestedWebsite && call.useTools && result.text) send('message.delta', { text: result.text });
       return;
     }
 
@@ -235,7 +274,7 @@ async function runAgent({ cfg, tier, messages, userInstructions = '', voice = fa
       }
       let args = {};
       let parseError = null;
-      try { args = c.args ? JSON.parse(c.args) : {}; } catch { parseError = 'Os argumentos não são um JSON válido.'; }
+      try { args = c.args ? JSON.parse(c.args) : {}; } catch { parseError = c.args && c.args.length > 6000 ? 'Os argumentos foram cortados pelo limite de tamanho. Divida o conteúdo em arquivos menores (até cerca de 250 linhas cada) e tente de novo.' : 'Os argumentos não são um JSON válido.'; }
       const info = { callId: c.id, tool: c.name, path: typeof args.path === 'string' ? args.path : (typeof args.from === 'string' ? args.from : undefined) };
       send('tool.started', info);
       const t0 = Date.now();
