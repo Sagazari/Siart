@@ -134,3 +134,14 @@ Não há pesquisa web integrada ao agente, conectores externos/MCP, automação 
 - A revisão verifica HTML (título, viewport, idioma, estrutura, IDs duplicados e âncoras), recursos locais, presença de CSS, media queries responsivas e sintaxe JavaScript sem executar o código.
 - Erros encontrados retornam ao agente para correção e nova revisão. O site só é marcado como concluído quando a revisão estática não aponta erros.
 - A revisão é estática: não substitui a abertura da prévia nem testes visuais/interativos em um navegador real.
+
+
+## Siart AI 1.5.0 — interface, movimento, voz e prompt
+
+- **CSS reescrito do zero** (`public/styles.css`): uma única camada, sem pilhas de `!important`. Paleta de cinzas quentes no mesmo princípio do Claude; esmeralda só em ação primária, foco e sucesso. Cartões de arquivo neutros (sem gradiente).
+- **Shimmer:** `.shimmer` usa um ladrilho de 200% da largura do texto, deslocado em exatos 200% por ciclo, então o fim do ciclo é idêntico ao começo (sem salto e sem o texto sumir). A fase é sincronizada pelo relógio global, e o brilho continua de onde estava quando a mensagem é reconstruída por um evento do servidor. Em "movimento reduzido" o brilho continua, mais lento.
+- **Texto que sobe do chão:** cada palavra, bloco de código e mensagem do usuário é recortada pela própria base (`clip-path`) e sobe de dentro dela (`translateY(105%)` → `0`). Não usa opacidade. O texto chega em fluxo suave mesmo quando o servidor entrega a resposta de uma vez (níveis com ferramentas seguram o texto até saber se haverá chamadas).
+- **Voz:** reconhecimento (`SpeechRecognition`) e síntese (`speechSynthesis`) do próprio navegador, gratuitos. A Siart escolhe a melhor voz feminina pt-BR disponível (vozes "Natural" do Edge como Francisca e Thalita, depois "Google português do Brasil", Luciana, etc.), fala em frases curtas para não ser cortada pelo Chrome, e o usuário pode escolher e testar a voz em **Preferências**. Cada resposta tem o botão **Ouvir**. Com a conversa por voz ligada, o servidor recebe `voice: true` e a Siart responde em frases curtas, sem Markdown.
+- **Prompt do agente** (`src/prompt.js`): módulos de identidade, honestidade, comunicação, método de engenharia, segurança, ofício de interfaces, protocolo de ferramentas e modo voz.
+
+**Limite honesto da voz:** a qualidade depende das vozes instaladas no aparelho. Sem uma voz neural (Edge) ou do Google (Chrome), o navegador usa uma voz mais robótica. Uma voz neural independente do aparelho exigiria um serviço de TTS no servidor.

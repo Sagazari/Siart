@@ -4,18 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#262624">
 <title>Siart AI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/styles.css?v=1.4.3-claude-shimmer">
+<link rel="stylesheet" href="/styles.css?v=1.5.0">
 </head>
 <body>
 <svg width="0" height="0" class="sprite" aria-hidden="true" focusable="false">
   <defs>
     <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#e4e6ea"/><stop offset="1" stop-color="#8c8f97"/>
+      <stop offset="0" stop-color="#f3f2ec"/><stop offset="1" stop-color="#a9a79e"/>
     </linearGradient>
     <mask id="moon-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">
       <rect width="32" height="32" fill="#fff"/><circle cx="21" cy="12" r="10.5" fill="#000"/>
@@ -135,7 +136,7 @@
     </div>
   </section>
 </div>
-<div id="preferences" class="preferences" hidden role="dialog" aria-modal="true" aria-labelledby="preferences-title"><form id="preferences-form" class="preferences-box"><button id="preferences-close" class="icon-btn preferences-close" type="button" aria-label="Fechar">×</button><h2 id="preferences-title">Suas instruções</h2><p>Defina preferências que a Siart deve considerar nas conversas. Elas ficam salvas neste navegador.</p><label for="custom-instructions">Como você quer que a Siart responda?</label><textarea id="custom-instructions" rows="6" maxlength="3000" placeholder="Ex.: Prefiro explicações detalhadas, exemplos práticos e respostas em português…"></textarea><div class="preferences-actions"><button class="btn-sm" id="preferences-cancel" type="button">Cancelar</button><button class="btn-sm primary" type="submit">Salvar instruções</button></div><p id="preferences-status" class="p-note" role="status"></p></form></div>
+<div id="preferences" class="preferences" hidden role="dialog" aria-modal="true" aria-labelledby="preferences-title"><form id="preferences-form" class="preferences-box"><button id="preferences-close" class="icon-btn preferences-close" type="button" aria-label="Fechar">×</button><h2 id="preferences-title">Suas instruções</h2><p>Defina preferências que a Siart deve considerar nas conversas. Elas ficam salvas neste navegador.</p><label for="custom-instructions">Como você quer que a Siart responda?</label><textarea id="custom-instructions" rows="6" maxlength="3000" placeholder="Ex.: Prefiro explicações detalhadas, exemplos práticos e respostas em português…"></textarea><label for="voice-select">Voz da Siart</label><div class="preferences-row"><select id="voice-select"></select><button class="btn-sm" id="voice-test" type="button">Testar voz</button></div><p id="voice-hint" class="p-note"></p><div class="preferences-actions"><button class="btn-sm" id="preferences-cancel" type="button">Cancelar</button><button class="btn-sm primary" type="submit">Salvar</button></div><p id="preferences-status" class="p-note" role="status"></p></form></div>
 <div id="login" class="login" hidden>
   <form id="login-form" class="login-box">
     <svg class="logo"><use href="#moon"/></svg>
@@ -146,7 +147,7 @@
     <p id="login-err" class="err" role="alert" hidden></p>
   </form>
 </div>
-<script src="/app.js?v=1.4.3-claude-shimmer"></script>
+<script src="/app.js?v=1.5.0"></script>
 <script src="/project.js"></script>
 </body>
 </html>

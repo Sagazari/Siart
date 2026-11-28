@@ -3,17 +3,55 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.join(__dirname, '..');
+const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 
 test('UI usa cache-busting novo para CSS e JavaScript', () => {
-  const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
-  assert.match(html, /styles\.css\?v=1\.4\.3-claude-shimmer/);
-  assert.match(html, /app\.js\?v=1\.4\.3-claude-shimmer/);
-  assert.doesNotMatch(html, /(?:styles\.css|app\.js)\?v=1\.4\.0-emerald/);
+  const html = read('public/index.html');
+  assert.match(html, /styles\.css\?v=1\.5\.0/);
+  assert.match(html, /app\.js\?v=1\.5\.0/);
 });
 
-test('gradiente de carregamento tem animação contínua e estado ativo', () => {
-  const css = fs.readFileSync(path.join(root, 'public/styles.css'), 'utf8');
-  assert.match(css, /\.work-status\.is-running \.work-current,\s*\.activity-label\.is-running\s*\{[\s\S]*?animation:\s*siart-claude-shimmer\s+2\.35s\s+linear\s+infinite\s*!important/s);
-  assert.match(css, /\.activity-label\.is-running/);
-  assert.match(css, /@keyframes\s+siart-claude-shimmer/);
+test('brilho de carregamento: ladrilho de 200% deslocado em exatos 200%, sem emenda', () => {
+  const css = read('public/styles.css');
+  assert.match(css, /\.shimmer\s*\{[\s\S]*?background-size:\s*200%\s+100%[\s\S]*?background-repeat:\s*repeat-x[\s\S]*?animation:\s*shimmer\s+2\.2s\s+linear\s+infinite/);
+  assert.match(css, /@keyframes\s+shimmer\s*\{\s*from\s*\{\s*background-position:\s*200%\s+0;\s*\}\s*to\s*\{\s*background-position:\s*0%\s+0;/);
+  // gradiente passa por cinza escuro, cinza claro e branco
+  assert.match(css, /--shimmer-peak:\s*#fff/i);
+});
+
+test('a folha de estilos não depende de !important para as animações', () => {
+  const css = read('public/styles.css');
+  assert.equal((css.match(/!important/g) || []).length, 1); // apenas o display:none do #scrim/#menu no desktop
+});
+
+test('o brilho nunca some em movimento reduzido (só fica mais lento)', () => {
+  const css = read('public/styles.css');
+  const block = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  assert.match(block, /\.shimmer[\s\S]*?animation:\s*shimmer\s+4\.4s\s+linear\s+infinite/);
+});
+
+test('texto sobe de uma base recortada (clip-path + translateY), nunca por opacidade', () => {
+  const css = read('public/styles.css');
+  assert.match(css, /@keyframes\s+emerge\s*\{\s*from\s*\{\s*transform:\s*translateY\(105%\);\s*\}\s*to\s*\{\s*transform:\s*translateY\(0\);/);
+  assert.match(css, /\.rw\s*\{[^}]*clip-path:/);
+  assert.match(css, /\.rwi\s*\{[^}]*animation:\s*emerge/);
+  const emerge = css.match(/@keyframes\s+emerge\s*\{[^}]*\}[^}]*\}/)[0];
+  assert.doesNotMatch(emerge, /opacity/);
+});
+
+test('cartões de arquivo usam superfície neutra, sem gradiente colorido', () => {
+  const css = read('public/styles.css');
+  const card = css.slice(css.indexOf('.artifact-card {'), css.indexOf('.artifact-actions'));
+  assert.doesNotMatch(card, /gradient/);
+  assert.match(card, /background:\s*var\(--surface\)/);
+});
+
+test('app.js usa o brilho e a subida de texto, e a voz escolhe voz feminina pt-BR', () => {
+  const js = read('public/app.js');
+  assert.match(js, /work-current shimmer/);
+  assert.match(js, /function applyReveal/);
+  assert.match(js, /function pickVoice/);
+  assert.match(js, /natural\|neural/);
+  assert.match(js, /requestAnimationFrame/);
+  new Function(js); // sintaxe válida
 });

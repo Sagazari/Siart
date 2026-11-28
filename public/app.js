@@ -7,7 +7,7 @@
   const ui = { tiers: $('tiers'), tierHint: $('tier-hint'), modelToggle: $('model-toggle'), modelPanel: $('model-panel'), notice: $('notice'), count: $('conv-count'), limitNote: $('limit-note'), limitText: $('limit-text'), limitNew: $('limit-new') };
   const STORE = 'siart.v1';
   const INSTRUCTIONS_KEY = 'siart.custom-instructions.v1';
-  const preferences = { root: $('preferences'), form: $('preferences-form'), input: $('custom-instructions'), status: $('preferences-status') };
+  const preferences = { root: $('preferences'), form: $('preferences-form'), input: $('custom-instructions'), status: $('preferences-status'), voice: $('voice-select'), voiceTest: $('voice-test'), voiceHint: $('voice-hint') };
   let customInstructions = '';
   try { customInstructions = localStorage.getItem(INSTRUCTIONS_KEY) || ''; } catch { /* storage unavailable */ }
   const SUGGESTIONS = [
@@ -118,8 +118,8 @@
     return out.join('');
   }
   function codeBlock(lang, code) {
-    return '<div class="code"><div class="code-head"><span>' + esc(lang || 'texto') +
-      '</span><button class="copy" type="button">Copiar</button></div><pre><code>' + esc(code) + '</code></pre></div>';
+    return '<div class="rb"><div class="code"><div class="code-head"><span>' + esc(lang || 'texto') +
+      '</span><button class="copy" type="button">Copiar</button></div><pre><code>' + esc(code) + '</code></pre></div></div>';
   }
   function md(src) {
     return src.split('```').map((part, i) => {
@@ -129,6 +129,99 @@
       const code = nl >= 0 ? part.slice(nl + 1) : part;
       return codeBlock(lang, code.replace(/\n$/, ''));
     }).join('');
+  }
+
+  // ---------- Movimento: brilho contínuo e texto que sobe do chão ----------
+  const SHIMMER_MS = 2200;
+  const REVEAL_MS = 650;
+  const stageSeen = new WeakMap();   // última etapa exibida por mensagem (fora do localStorage)
+  const revealState = new WeakMap(); // instante em que cada palavra/bloco apareceu
+  const reducedMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Todo elemento com brilho recebe a mesma fase (relógio global). Assim, quando a mensagem é
+  // reconstruída por um evento do servidor, o brilho continua de onde estava em vez de recomeçar.
+  function syncShimmer(root) {
+    const phase = -((performance.now() % SHIMMER_MS) / 1000) + 's';
+    root.querySelectorAll('.shimmer').forEach((n) => n.style.setProperty('--shimmer-delay', phase));
+  }
+  // Cada palavra nova entra recortada pela própria base e sobe de dentro dela. O atraso negativo
+  // (--d) coloca palavras reconstruídas na fase certa da animação, então nada reinicia nem pisca.
+  function applyReveal(root, key) {
+    if (reducedMotion()) return;
+    let st = revealState.get(key);
+    if (!st) { st = { words: [], blocks: [] }; revealState.set(key, st); }
+    const now = performance.now();
+    root.querySelectorAll('.rb').forEach((block, i) => {
+      if (st.blocks[i] === undefined) st.blocks[i] = now;
+      const age = now - st.blocks[i];
+      if (age < REVEAL_MS) { block.classList.add('young'); block.style.setProperty('--d', (-age) + 'ms'); }
+    });
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.parentElement && n.parentElement.closest('.rb, .rw')) || !n.nodeValue.trim() ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+    });
+    const nodes = []; for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
+    let k = 0, fresh = 0;
+    for (const node of nodes) {
+      const parts = node.nodeValue.split(/(\s+)/);
+      let touched = false;
+      const frag = document.createDocumentFragment();
+      for (const part of parts) {
+        if (!part) continue;
+        if (/^\s+$/.test(part)) { frag.append(part); continue; }
+        if (st.words[k] === undefined) st.words[k] = now + Math.min(fresh++, 18) * 16; // pequeno escalonamento dentro do mesmo lote
+        const delay = st.words[k] - now; k++;
+        if (-delay < REVEAL_MS) {
+          const outer = document.createElement('span'); outer.className = 'rw';
+          const inner = document.createElement('span'); inner.className = 'rwi'; inner.textContent = part;
+          inner.style.setProperty('--d', delay + 'ms'); outer.append(inner); frag.append(outer); touched = true;
+        } else frag.append(part);
+      }
+      if (touched) node.replaceWith(frag);
+    }
+  }
+  // Ritmo de entrada: o servidor pode entregar a resposta em rajada (níveis com ferramentas seguram o texto
+  // até saber se haverá chamadas). Aqui o texto é liberado em fluxo suave, palavra a palavra, e alcança o
+  // servidor sem atraso artificial quando há muito acumulado.
+  const pacer = new WeakMap();
+  function pushDelta(reply, text) {
+    let p = pacer.get(reply);
+    if (!p) { p = { pending: '', running: false, waiters: [] }; pacer.set(reply, p); }
+    p.pending += text;
+    if (p.running) return;
+    p.running = true;
+    const tick = () => {
+      if (!p.pending) { p.running = false; p.waiters.splice(0).forEach((r) => r()); return; }
+      const want = Math.max(8, Math.ceil(p.pending.length / 36));
+      const rest = p.pending.slice(want).search(/\s/);
+      const cut = rest < 0 ? p.pending.length : want + rest + 1;
+      reply.content += p.pending.slice(0, cut); p.pending = p.pending.slice(cut);
+      queueStreamPaint(reply);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  function flushPacer(reply) {
+    const p = pacer.get(reply);
+    if (!p) return;
+    reply.content += p.pending; p.pending = ''; p.running = false; p.waiters.splice(0).forEach((r) => r());
+  }
+  function drained(reply) {
+    const p = pacer.get(reply);
+    if (!p || !p.pending) return Promise.resolve();
+    return new Promise((resolve) => { p.waiters.push(resolve); setTimeout(() => { flushPacer(reply); }, 5000); });
+  }
+  let streamQueued = false;
+  function queueStreamPaint(reply) {
+    if (streamQueued) return;
+    streamQueued = true;
+    requestAnimationFrame(() => {
+      streamQueued = false;
+      const bubble = el.messages.querySelector('.msg:last-child .bubble');
+      if (!bubble) return;
+      const nearBottom = el.messages.scrollHeight - el.messages.scrollTop - el.messages.clientHeight < 90;
+      bubble.innerHTML = md(reply.content);
+      applyReveal(bubble, reply);
+      if (nearBottom) el.messages.scrollTop = el.messages.scrollHeight;
+    });
   }
 
   const TOOL_LABEL = {
@@ -178,28 +271,32 @@
     });
     if ((live && m.working) || (m.activities && m.activities.length)) {
       const status = document.createElement('div'); status.className = 'work-status' + (live && m.working ? ' is-running' : '');
+      const head = document.createElement('div'); head.className = 'work-head';
       if (live && m.working) {
-        const head = document.createElement('div'); head.className = 'work-head';
-        head.innerHTML = '<svg class="logo moon-spin" viewBox="0 0 32 32"><use href="#moon"/></svg>';
-        const label = document.createElement('span'); label.className = 'work-current rise-in'; label.textContent = m.stage || 'Analisando sua solicitação...';
-        head.append(label); status.append(head);
+        head.innerHTML = '<svg class="logo moon-spin" viewBox="0 0 32 32" aria-hidden="true"><use href="#moon"/></svg>';
+        // O texto só "sobe do chão" quando a etapa muda; em re-renderizações da mesma etapa ele permanece parado.
+        const changed = stageSeen.get(m) !== m.stage; stageSeen.set(m, m.stage);
+        const clip = document.createElement('span'); clip.className = 'work-clip';
+        const label = document.createElement('span'); label.className = 'work-current shimmer' + (changed ? ' emerge' : '');
+        label.textContent = m.stage || 'Analisando sua solicitação...';
+        clip.append(label); head.append(clip);
       } else {
-        const head = document.createElement('div'); head.className = 'work-head';
         if (m.completed) {
           const done = document.createElement('span'); done.className = 'work-done-icon'; done.setAttribute('aria-label', 'Concluído'); done.textContent = '✓'; head.append(done);
         }
-        const label = document.createElement('span'); label.className = 'work-current' + (m.completed ? ' is-done' : ''); label.textContent = m.completed ? 'Concluído' : 'Etapas executadas';
-        head.append(label); status.append(head);
+        const label = document.createElement('span'); label.className = 'work-current is-done'; label.textContent = m.completed ? 'Concluído' : 'Etapas executadas';
+        head.append(label);
       }
+      status.append(head);
       if (m.activities && m.activities.length) {
         const list = document.createElement('ul'); list.className = 'activity';
         m.activities.forEach((a) => {
           const item = document.createElement('li');
-          const state = document.createElement('span'); state.className = 'st ' + a.status;
-          state.setAttribute('aria-label', a.status === 'running' ? 'Em andamento' : a.status === 'failed' ? 'Falhou' : 'Concluído');
-          state.textContent = a.status === 'running' ? '◌' : a.status === 'failed' ? '!' : '✓';
-          const label = document.createElement('span'); label.className = 'activity-label' + (a.status === 'running' ? ' is-running' : ''); label.textContent = a.label;
-          item.append(state, label);
+          const mark = document.createElement('span'); mark.className = 'st ' + a.status;
+          mark.setAttribute('aria-label', a.status === 'running' ? 'Em andamento' : a.status === 'failed' ? 'Falhou' : 'Concluído');
+          mark.textContent = a.status === 'running' ? '' : a.status === 'failed' ? '!' : '✓';
+          const label = document.createElement('span'); label.className = 'activity-label' + (a.status === 'running' ? ' is-running shimmer' : ''); label.textContent = a.label;
+          item.append(mark, label);
           if (a.detail) { const detail = document.createElement('code'); detail.textContent = a.detail; item.append(detail); }
           list.append(item);
         });
@@ -247,12 +344,15 @@
     }
     else if (live && !m.content && !(m.fallbacks && m.fallbacks.length)) {
       bubble.textContent = ''; // sem animação duplicada de três pontos; o status da Lua já indica atividade
-    } else bubble.innerHTML = md(m.content);
+    } else { bubble.innerHTML = md(m.content); if (live) applyReveal(bubble, m); }
     wrap.append(bubble);
     if (m.via && m.role === 'assistant') { const v = document.createElement('div'); v.className = 'meta'; v.textContent = m.via.tier + ' · via ' + m.via.provider; wrap.append(v); }
-    if (m.role === 'assistant' && m.content && !live) { const actions = document.createElement('div'); actions.className = 'message-actions'; const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'message-action copy-answer'; copy.textContent = 'Copiar resposta'; copy.dataset.copy = 'answer'; actions.append(copy); wrap.append(actions); }
+    if (m.role === 'assistant' && m.content && !live) { const actions = document.createElement('div'); actions.className = 'message-actions'; const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'message-action copy-answer'; copy.textContent = 'Copiar resposta'; copy.dataset.copy = 'answer'; actions.append(copy);
+      if ('speechSynthesis' in window) { const listen = document.createElement('button'); listen.type = 'button'; listen.className = 'message-action listen-answer'; listen.setAttribute('aria-label', 'Ouvir a resposta'); listen.innerHTML = '<svg class="ico" aria-hidden="true"><use href="#i-volume"/></svg><span>Ouvir</span>'; actions.append(listen); }
+      wrap.append(actions); }
     if (m.stopped) { const s = document.createElement('div'); s.className = 'stopped'; s.textContent = 'Resposta interrompida.'; wrap.append(s); }
     if (m.error) { const e = document.createElement('div'); e.className = 'err'; e.textContent = m.error; wrap.append(e); }
+    syncShimmer(wrap);
     return wrap;
   }
 
@@ -491,7 +591,7 @@
     });
     controller = new AbortController();
     try {
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: payload, ...(tierId ? { tier: tierId } : {}), ...(customInstructions ? { instructions: customInstructions } : {}) }), signal: controller.signal });
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: payload, ...(tierId ? { tier: tierId } : {}), ...(customInstructions ? { instructions: customInstructions } : {}), ...(voiceActive ? { voice: true } : {}) }), signal: controller.signal });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         if (j.code === 'auth_required') window.dispatchEvent(new Event('siart:auth'));
@@ -501,13 +601,7 @@
         if (event === 'task.started') { reply.working = true; reply.stage = 'Analisando sua solicitação...'; refreshLast(reply);
         } else if (event === 'task.completed') { reply.working = false; reply.completed = true;
         } else if (event === 'message.delta') {
-          reply.content += data.text;
-          const bubble = el.messages.querySelector('.msg:last-child .bubble');
-          if (bubble) {
-            const nearBottom = el.messages.scrollHeight - el.messages.scrollTop - el.messages.clientHeight < 80;
-            bubble.innerHTML = md(reply.content);
-            if (nearBottom) el.messages.scrollTop = el.messages.scrollHeight;
-          }
+          pushDelta(reply, data.text);
         } else if (event === 'model.selected') {
           reply.via = { tier: data.tierName, provider: data.providerName };
         } else if (event === 'model.fallback') {
@@ -548,6 +642,7 @@
       if (e.name === 'AbortError') reply.stopped = true;
       else reply.error = (e instanceof TypeError || /network|fetch failed|failed to fetch/i.test(e.message || '')) ? 'Falha de conexão com os provedores. Confira sua internet e tente novamente.' : (e.message || 'Falha de conexão.');
     } finally {
+      if (reply.stopped || reply.error) flushPacer(reply); else await drained(reply);
       reply.working = false;
       controller = null;
       setStreaming(false);
@@ -626,57 +721,119 @@
     rec.onend = () => { if (recognition === rec) recognition = null; restartListening(); };
     try { rec.start(); } catch { recognition = null; restartListening(); }
   }
+  // ---------- Voz: síntese gratuita do próprio aparelho, escolhendo a melhor voz feminina pt-BR ----------
+  const VOICE_KEY = 'siart.voice.v1';
+  let preferredVoice = '';
+  try { preferredVoice = localStorage.getItem(VOICE_KEY) || ''; } catch { /* sem armazenamento */ }
+  const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
+  let speakToken = 0;
+  let speakingButton = null;
+
   function cleanSpeechText(text) {
-    return String(text || '').replace(/```[\s\S]*?```/g, ' Código omitido. ')
-      .replace(/`([^`]+)`/g, '$1').replace(/https?:\/\/\S+/g, 'link')
-      .replace(/[#*_>|]/g, ' ').replace(/\s+/g, ' ').trim();
+    return String(text || '')
+      .replace(/```[\s\S]*?```/g, ' O código está na tela. ')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/`([^`]+)`/g, '$1').replace(/https?:\/\/\S+/g, ' link ')
+      .replace(/^\s*[-*+]\s+/gm, '').replace(/^\s*\d+[.)]\s+/gm, '')
+      .replace(/[#*_>|~]/g, ' ').replace(/\s*[—–]\s*/g, ', ')
+      .replace(/\s+/g, ' ').trim();
   }
-  function speakVoice(text) {
-    if (!('speechSynthesis' in window)) { restartListening(); return; }
+  // Frases curtas evitam o corte que o Chrome faz em falas longas (~15 s) e deixam a pausa natural.
+  function splitSpeech(text) {
+    const sentences = text.match(/[^.!?…]+[.!?…]*\s*/g) || [text];
+    const out = [];
+    for (const raw of sentences) {
+      let part = raw.trim();
+      while (part.length > 200) {
+        let cut = part.lastIndexOf(',', 200); if (cut < 80) cut = part.lastIndexOf(' ', 200); if (cut < 40) cut = 200;
+        out.push(part.slice(0, cut + 1).trim()); part = part.slice(cut + 1).trim();
+      }
+      if (part) out.push(part);
+    }
+    return out;
+  }
+  const MALE_VOICE = /\b(felipe|ant[ôo]nio|donato|daniel|ricardo|jorge|jo[ãa]o|male|masculin[oa]?)\b/i;
+  function voiceScore(v) {
+    const name = v.name || '', lang = String(v.lang || '').replace('_', '-');
+    if (!/^pt/i.test(lang) || MALE_VOICE.test(name)) return -1;
+    let score = /^pt-BR/i.test(lang) ? 40 : 10;
+    if (/natural|neural/i.test(name)) score += 100;            // Edge/Windows: vozes neurais gratuitas
+    if (/online/i.test(name)) score += 15;
+    if (/francisca|thalita|brenda|leticia|manuela|giovanna|yara|elza|vit[óo]ria/i.test(name)) score += 60;
+    if (/google/i.test(name)) score += 55;                     // Chrome: "Google português do Brasil"
+    if (/luciana|fernanda|camila|helena|maria|joana|female|feminin/i.test(name)) score += 40;
+    return score;
+  }
+  function loadVoices() {
+    return new Promise((resolve) => {
+      if (!synth) return resolve([]);
+      const now = synth.getVoices();
+      if (now.length) return resolve(now);
+      const done = () => { synth.removeEventListener('voiceschanged', done); resolve(synth.getVoices()); };
+      synth.addEventListener('voiceschanged', done);
+      setTimeout(done, 1500);
+    });
+  }
+  function portugueseVoices(all) { return all.filter((v) => voiceScore(v) >= 0).sort((x, y) => voiceScore(y) - voiceScore(x)); }
+  function pickVoice(all) {
+    const list = portugueseVoices(all);
+    return list.find((v) => v.voiceURI === preferredVoice) || list[0] || null;
+  }
+  function stopSpeaking() {
+    speakToken++;
+    if (synth) synth.cancel();
+    voiceSpeaking = false;
+    if (speakingButton) { speakingButton.querySelector('span').textContent = 'Ouvir'; speakingButton.dataset.active = 'false'; speakingButton = null; }
+  }
+  async function speakVoice(text, { button = null } = {}) {
+    if (!synth) { restartListening(); return; }
     stopListening();
-    window.speechSynthesis.cancel();
-    const spoken = cleanSpeechText(text);
-    if (!spoken) { restartListening(); return; }
-    const utterance = new SpeechSynthesisUtterance(spoken);
-    utterance.lang = 'pt-BR';
-    utterance.rate = 0.96;
-    utterance.pitch = 1.0;
-    const voices = window.speechSynthesis.getVoices();
-    const pt = voices.filter(v => /^pt-BR/i.test(v.lang));
-    const femaleHint = /female|feminina|mulher|luciana|fernanda|camila|maria|francisca|bruna|helena/i;
-    // Prefere uma voz pt-BR com nome feminino quando o aparelho oferece essa opção.
-    utterance.voice = pt.find(v => femaleHint.test(v.name)) || pt[0] || voices.find(v => /^pt/i.test(v.lang)) || null;
-    utterance.onstart = () => { voiceSpeaking = true; setVoiceState('speaking'); };
-    utterance.onend = utterance.onerror = () => { voiceSpeaking = false; if (voiceActive) restartListening(); else setVoiceState('off'); };
-    window.speechSynthesis.speak(utterance);
+    stopSpeaking();
+    const token = ++speakToken;
+    const chunks = splitSpeech(cleanSpeechText(text));
+    if (!chunks.length) { if (voiceActive) restartListening(); return; }
+    const voice = pickVoice(await loadVoices());
+    if (token !== speakToken) return;
+    voiceSpeaking = true; setVoiceState('speaking');
+    if (button) { speakingButton = button; button.querySelector('span').textContent = 'Parar'; button.dataset.active = 'true'; }
+    const finish = () => {
+      if (token !== speakToken) return;
+      voiceSpeaking = false;
+      if (button && speakingButton === button) { button.querySelector('span').textContent = 'Ouvir'; button.dataset.active = 'false'; speakingButton = null; }
+      if (voiceActive) restartListening(); else setVoiceState('off');
+    };
+    let i = 0;
+    const next = () => {
+      if (token !== speakToken) return;
+      if (i >= chunks.length) { finish(); return; }
+      const u = new SpeechSynthesisUtterance(chunks[i++]);
+      u.lang = (voice && voice.lang) || 'pt-BR';
+      if (voice) u.voice = voice;
+      u.rate = 1; u.pitch = 1.04; u.volume = 1;
+      u.onend = next;
+      u.onerror = (e) => { if (e.error === 'interrupted' || e.error === 'canceled') return; next(); };
+      synth.speak(u);
+    };
+    next();
+  }
+  function turnVoiceOff() {
+    voiceActive = false; stopListening(); stopSpeaking(); setVoiceState('off');
   }
   if (el.voice) el.voice.addEventListener('click', () => {
-    if (voiceActive) {
-      voiceActive = false; voiceSpeaking = false; stopListening();
-      if (voicePermissionStream) { voicePermissionStream.getTracks().forEach((track) => track.stop()); voicePermissionStream = null; }
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-      setVoiceState('off');
-      return;
-    }
-    if (!speechRecognitionConstructor()) { setVoiceState('unsupported'); showNotice('Seu navegador não oferece reconhecimento de voz. Tente abrir a Siart no Chrome atualizado.'); return; }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showNotice('O Chrome não disponibilizou o microfone para esta página. Verifique se o site está aberto em HTTPS.');
-      return;
-    }
-    // O clique do usuário dispara o pedido real de permissão. SpeechRecognition,
-    // sozinho, pode retornar "not-allowed" sem abrir a caixa de autorização.
+    if (voiceSpeaking && voiceActive) { stopSpeaking(); restartListening(); return; }   // interrompe a fala e volta a ouvir
+    if (voiceActive) { turnVoiceOff(); return; }
+    if (!speechRecognitionConstructor()) { setVoiceState('unsupported'); showNotice('Este navegador não oferece reconhecimento de voz. Use o Chrome ou o Edge atualizados.'); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showNotice('O microfone só funciona em páginas HTTPS. Confira o endereço do site.'); return; }
+    // O clique dispara o pedido real de permissão; SpeechRecognition sozinho pode falhar sem abrir a caixa.
     navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-      voicePermissionStream = stream;
       stream.getTracks().forEach((track) => track.stop());
-      voicePermissionStream = null;
       voiceActive = true;
-      if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
+      loadVoices();
       startListening();
     }).catch((error) => {
       const denied = error && (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError');
-      showNotice(denied
-        ? 'O Chrome negou o acesso ao microfone deste site.'
-        : 'Não foi possível acessar o microfone (' + ((error && error.name) || 'erro desconhecido') + ').');
+      showNotice(denied ? 'O navegador bloqueou o microfone para este site. Libere nas permissões do site.' : 'Não foi possível acessar o microfone (' + ((error && error.name) || 'erro desconhecido') + ').');
     });
   });
 
@@ -704,11 +861,26 @@
   if (el.chatSearch) el.chatSearch.addEventListener('input', renderList);
   const openPreferences = $('open-preferences');
   const closePreferences = () => { preferences.root.hidden = true; };
-  openPreferences?.addEventListener('click', () => { preferences.input.value = customInstructions; preferences.root.hidden = false; preferences.input.focus(); });
+  async function fillVoiceOptions() {
+    if (!preferences.voice) return;
+    const list = portugueseVoices(await loadVoices());
+    preferences.voice.textContent = '';
+    const auto = document.createElement('option'); auto.value = ''; auto.textContent = list.length ? 'Automática (melhor voz feminina disponível)' : 'Nenhuma voz em português encontrada'; preferences.voice.append(auto);
+    list.forEach((v) => { const o = document.createElement('option'); o.value = v.voiceURI; o.textContent = v.name.replace(/^Microsoft\s+/, '') + ' · ' + v.lang; preferences.voice.append(o); });
+    preferences.voice.value = list.some((v) => v.voiceURI === preferredVoice) ? preferredVoice : '';
+    const natural = list.some((v) => /natural|neural|google/i.test(v.name));
+    preferences.voiceHint.textContent = natural ? 'Vozes gratuitas do próprio aparelho. Quem fala é a voz escolhida acima.' : 'Para uma voz mais natural e gratuita, abra a Siart no Microsoft Edge (vozes "Natural", como Francisca e Thalita) ou no Google Chrome.';
+  }
+  openPreferences?.addEventListener('click', () => { preferences.input.value = customInstructions; preferences.root.hidden = false; fillVoiceOptions(); preferences.input.focus(); });
+  preferences.voiceTest?.addEventListener('click', () => { preferredVoiceTest(); });
+  function preferredVoiceTest() {
+    const keep = preferredVoice; preferredVoice = preferences.voice.value;
+    speakVoice('Olá! Eu sou a Siart. É assim que eu falo com você.').finally(() => { preferredVoice = keep; });
+  }
   $('preferences-close')?.addEventListener('click', closePreferences);
   $('preferences-cancel')?.addEventListener('click', closePreferences);
   preferences.root?.addEventListener('click', (event) => { if (event.target === preferences.root) closePreferences(); });
-  preferences.form?.addEventListener('submit', (event) => { event.preventDefault(); customInstructions = preferences.input.value.trim().slice(0,3000); try { localStorage.setItem(INSTRUCTIONS_KEY, customInstructions); } catch { /* storage unavailable */ } preferences.status.textContent = 'Instruções salvas neste navegador.'; setTimeout(closePreferences, 650); });
+  preferences.form?.addEventListener('submit', (event) => { event.preventDefault(); customInstructions = preferences.input.value.trim().slice(0,3000); try { localStorage.setItem(INSTRUCTIONS_KEY, customInstructions); } catch { /* storage unavailable */ } preferredVoice = preferences.voice ? preferences.voice.value : preferredVoice; try { localStorage.setItem(VOICE_KEY, preferredVoice); } catch { /* ok */ } stopSpeaking(); preferences.status.textContent = 'Preferências salvas neste navegador.'; setTimeout(closePreferences, 650); });
   el.input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); el.form.requestSubmit(); }
   });
@@ -736,6 +908,13 @@
   el.messages.addEventListener('click', async (e) => {
     const answerBtn = e.target.closest('.copy-answer');
     if (answerBtn) { const msg = answerBtn.closest('.msg'); const text = msg?.querySelector('.bubble')?.innerText || ''; try { await navigator.clipboard.writeText(text); answerBtn.textContent = 'Copiado'; } catch { answerBtn.textContent = 'Falha ao copiar'; } setTimeout(() => { answerBtn.textContent = 'Copiar resposta'; }, 1500); return; }
+    const listenBtn = e.target.closest('.listen-answer');
+    if (listenBtn) {
+      if (speakingButton === listenBtn) { stopSpeaking(); if (voiceActive) restartListening(); else setVoiceState('off'); return; }
+      const text = listenBtn.closest('.msg')?.querySelector('.bubble')?.innerText || '';
+      speakVoice(text, { button: listenBtn });
+      return;
+    }
     const btn = e.target.closest('.copy');
     if (!btn) return;
     const code = btn.closest('.code').querySelector('code').textContent;
